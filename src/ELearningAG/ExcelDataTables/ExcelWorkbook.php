@@ -11,7 +11,7 @@ namespace ELearningAG\ExcelDataTables;
  * @copyright 2014 die eLearning AG
  * @license GPL-3.0 
  */
- class ExcelWorkbook implements \Countable
+class ExcelWorkbook implements \Countable
 {
 
 		/**
@@ -187,14 +187,14 @@ namespace ELearningAG\ExcelDataTables;
 						$format = $formats->item($id);
 						$code = strtoupper($format->getAttribute('formatCode'));
 						if($code === 'GENERAL') {
-							$generalID = $id;
+								$generalID = $id;
 						} elseif($code === "DD/MM/YYYY\ HH:MM:SS") {
-							$foundId = $id;
-							$exists = true;
+								$foundId = $id;
+								$exists = true;
 						} else {
 								// Do some "guessing" if the current format is "good enough"
 								$score 	= (strpos($code, 'YY') !== false ? 1 : 0)
-								 		+ (strpos($code, 'YYYY') !== false ? 1 : 0)
+										+ (strpos($code, 'YYYY') !== false ? 1 : 0)
 										+ (strpos($code, 'MM') !== false ? 1 : 0)
 										+ (strpos($code, 'D') !== false ? 1 : 0)
 										+ (strpos($code, 'DD') !== false ? 1 : 0)
@@ -202,16 +202,16 @@ namespace ELearningAG\ExcelDataTables;
 										+ (strpos($code, 'HH:MM') !== false ? 1 : 0)
 										+ (strpos($code, 'HH:MM:SS') !== false ? 1 : 0);
 								if($score > $maxScore) {
-									$maxScore = $score;
-									$exists = true;
-									$foundId = $id;
+										$maxScore = $score;
+										$exists = true;
+										$foundId = $id;
 								}
 						}
 				}
 				if($exists) {
-					return $foundId;
+						return $foundId;
 				} else {
-					return $generalId;
+						return $generalId;
 				}
 		}
 
@@ -226,12 +226,13 @@ namespace ELearningAG\ExcelDataTables;
 		 * @param string $name
 		 */
 		public function addWorksheet(ExcelWorksheet $worksheet, $id = null, $name = 'Data') {
-				if(is_null($id)) {
-					$id = 0;
-					while($this->getXLSX()->statName('xl/worksheets/sheet'.($id+1).'.xml') !== false) {
-						$id++;
-					}
-				}
+				if(is_null($id) || $id <= 0) {
+						$lastId = 0;
+						while($this->getXLSX()->statName('xl/worksheets/sheet'.($lastId+1).'.xml') !== false) {
+								$lastId++;
+						}   
+						$id = $lastId + $id;
+				} 
 				$old = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
 				if($old === false) {
 						throw new \Exception('Appending new sheets is not yet implemented');
@@ -275,12 +276,13 @@ namespace ELearningAG\ExcelDataTables;
 						throw new \Exception('File does not exists: '.$this->srcFilename);
 				}
 				if($this->srcFilename !== $this->targetFilename) {
-						copy($this->srcFilename, $this->targetFilename);
+						// copy($this->srcFilename, $this->targetFilename);
+						file_put_contents($this->targetFilename, file_get_contents($this->srcFilename));
 						$this->srcFilename = $this->targetFilename;
 				}
 				$isOpen = $this->xlsx->open($this->targetFilename);
 				if($isOpen !== true) {
-					throw new \Exception('File not valid: '.$this->targetFilename);
+						throw new \Exception('File not valid: '.$this->targetFilename);
 				}
 				return $this;
 		}
@@ -332,7 +334,7 @@ namespace ELearningAG\ExcelDataTables;
 		public function saveStyles() {
 				$this->getXLSX()->addFromString('xl/styles.xml', $this->getStyles()->saveXML());
 				if($this->isAutoSaveEnabled()) {
-					$this->save();
+						$this->save();
 				}
 				return $this;
 		}
