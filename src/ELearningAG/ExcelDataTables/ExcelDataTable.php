@@ -395,7 +395,8 @@ class ExcelDataTable
 				if(!is_null($targetFilename)) {
 					$xlsx->setFilename($targetFilename);
 				}
-				$xlsx->addWorksheet($worksheet->addRows($this->toArray()), $this->sheetId, $this->sheetName)->save();
+				$worksheet->addRows($this->toArray());
+				$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName)->save();
 				return $this;
 		}
 

@@ -243,7 +243,6 @@ namespace ELearningAG\ExcelDataTables;
 						$newSheetData = $document->importNode( $worksheet->getDocument()->getElementsByTagName('sheetData')->item(0), true );
 						$oldSheetData->parentNode->replaceChild($newSheetData, $oldSheetData);
 						$this->getXLSX()->addFromString('xl/worksheets/sheet'.$id.'.xml', $document->saveXML());
-
 				}
 				if($this->isAutoSaveEnabled()) {
 						$this->save();

@@ -64,8 +64,21 @@ class ExcelWorksheet
 
 		protected $dateTimeColumns = array();
 
+		protected $rows = array();
+
+		protected $dirty = false;
 
 		protected $rowCounter = 1;
+
+		const COLUMN_TYPE_STRING = 0;
+		const COLUMN_TYPE_NUMBER = 1;
+		const COLUMN_TYPE_DATETIME = 2;
+
+		protected static $columnTypes = array(
+			'string' => 0,
+			'number' => 1,
+			'datetime' => 2
+		);
 
 		/**
 		 * Setup a default document: XML head, Worksheet element, SheetData element.
@@ -83,10 +96,11 @@ class ExcelWorksheet
 		 * @return $this
 		 */
 		public function setDateTimeFormatId($id) {
+				$this->dirty = true;
 				$this->dateTimeFormatId = $id;
-				foreach($this->dateTimeColumns as $column) {
+				/*foreach($this->dateTimeColumns as $column) {
 					$column->setAttribute('s', $id);
-				}
+				}*/
 				return $this;
 		}
 
@@ -153,54 +167,56 @@ class ExcelWorksheet
 		 * @return \DOMElement
 		 */
 		protected function getNewRow() {
-				$sheetData = $this->getSheetData();
+				/*$sheetData = $this->getSheetData();
 				$row = $this->append('row', array(), $sheetData);
 				$row->setAttribute('r', $this->rowCounter++);
-				return $row;			
+				return $row;*/
+				$this->rows[] = array();
+				return count($this->rows)-1;
 		}
 
-		/**
+		/*
 		 * Set the inner text for $element to $text. Returns the DOMNode
 		 * representing the text.
 		 *
 		 * @return \DOMText
 		 */
-		protected function setText($element, $text) {
+		/*protected function setText($element, $text) {
 				$textElement = $this->getDocument()->createTextNode($text);
 				$element->appendChild($textElement);
 				return $textElement;
-		}
+		}*/
 
-		/**
+		/*
 		 * Add an inline string column to the given $row.
 		 *
 		 * @param \DOMElement $row
 		 * @param string $column
 		 * @return \DOMElement
 		 */
-		protected function addStringColumnToRow($row, $column) {
+		/*protected function addStringColumnToRow($row, $column) {
 				$c = $this->append('c', array('t' => 'inlineStr'), $row);
 				$is = $this->append('is', array(), $c);
 				$t = $this->append('t', array(), $is);
 				$this->setText($t, $column);
 				return $t;
-		}
+		}*/
 
-		/**
+		/*
 		 * Add an number column to the given $row.
 		 *
 		 * @param \DOMElement $row
 		 * @param int|string $column
 		 * @return \DOMElement
 		 */
-		protected function addNumberColumnToRow($row, $column) {
+		/*protected function addNumberColumnToRow($row, $column) {
 				$c = $this->append('c', array(), $row);
 				$v = $this->append('v', array(), $c);
 				$this->setText($v, $column);
 				return $v;
-		}
+		}*/
 
-		/**
+		/*
 		 * Add a date time dolumn to the given $row. $column is converted to a numerical
 		 * value relativ to the static::$baseDate value
 		 *
@@ -208,13 +224,13 @@ class ExcelWorksheet
 		 * @param \DateTimeInterface $column
 		 * @return \DOMElement
 		 */
-		protected function addDateTimeColumnToRow($row, \DateTimeInterface $column) {
+		/*protected function addDateTimeColumnToRow($row, \DateTimeInterface $column) {
 				$c = $this->append('c', array('s' => $this->dateTimeFormatId), $row);
 				$this->dateTimeColumns[] = $c;
 				$v = $this->append('v', array(), $c);
 				$this->setText($v, static::convertDate($column) );
 				return $v;
-		}
+		}*/
 
 		/**
 		 * Add a column to a row. The type of the column is deferred by its value
@@ -228,14 +244,56 @@ class ExcelWorksheet
 						&& isset($column['type']) 
 						&& isset($column['value']) 
 						&& in_array($column['type'], array('string', 'number', 'datetime'))) {
-								$function = 'add'.ucfirst($column['type']).'ColumnToRow';
-								return $this->$function($row, $column['value']);
+								//$function = 'add'.ucfirst($column['type']).'ColumnToRow';
+								//return $this->$function($row, $column['value']);
+								$this->rows[$row][] = array(self::$columnTypes[$column['type']], $column['value']);
 						} elseif(is_numeric($column)) {
-								return $this->addNumberColumnToRow($row, $column);
+								$this->rows[$row][] = array(self::COLUMN_TYPE_NUMBER, $column);
+								//return $this->addNumberColumnToRow($row, $column);
 						} elseif($column instanceof \DateTimeInterface) {
-								return $this->addDateTimeColumnToRow($row, $column);
+								$this->rows[$row][] = array(self::COLUMN_TYPE_DATETIME, $column);
+								//return $this->addDateTimeColumnToRow($row, $column);
+						} else {
+								$this->rows[$row][] = array(self::COLUMN_TYPE_STRING, $column);
 						}
-				return $this->addStringColumnToRow($row, (string)$column);
+				//return $this->addStringColumnToRow($row, (string)$column);
+		}
+
+		protected function toXMLColumn($column) {
+				switch($column[0]) {
+				case self::COLUMN_TYPE_NUMBER:
+						return '<c><v>'.$column[1].'</v></c>';
+						break;
+				case self::COLUMN_TYPE_DATETIME:
+						return '<c s="'.$this->dateTimeFormatId.'"><v>'.static::convertDate($column[1]).'</v></c>';
+						break;
+				// case self::COLUMN_TYPE_STRING:
+				default:
+						return '<c t="inlineStr"><is><t>'.$column[1].'</t></is></c>';
+						break;
+				}
+		}
+
+		protected function updateDocument() {
+				if($this->dirty) {
+						$this->dirty = false;
+						$self = $this;
+						$this->rowCounter = 1;
+						$fragment = $this->document->createDocumentFragment();
+						$xml = implode('', array_map(function($row) use ($self) {
+								return '<row r="'.($self->rowCounter++).'">'.implode('', array_map(function($column) use ($self) {
+										return $self->toXMLColumn($column);
+								}, $row)).'</row>';
+						}, $this->rows));
+						$fragment->appendXML($xml);
+								$this->getSheetData()->parentNode->replaceChild(
+										$s = $this->getSheetData()->cloneNode( false ),
+										$this->getSheetData()
+								);
+								$this->sheetData = $s;
+						$this->getSheetData()->appendChild($fragment);
+
+				}
 		}
 
 		/**
@@ -251,6 +309,7 @@ class ExcelWorksheet
 		 * @return $this
 		 */
 		public function addRow($columns = array()) {
+				$this->dirty = true;
 				$row = $this->getNewRow();
 				foreach($columns as $column) {
 						$this->addColumnToRow($row, $column);
@@ -268,6 +327,7 @@ class ExcelWorksheet
 						$this->document = new \DOMDocument('1.0', 'utf-8');
 						$this->document->xmlStandalone = true;
 				}
+				$this->updateDocument();
 				return $this->document;
 		}
 
@@ -280,6 +340,7 @@ class ExcelWorksheet
 				if(is_null($this->sheetData)) {
 						$this->sheetData = $this->append('sheetData');
 				}
+				$this->updateDocument();
 				return $this->sheetData;
 		}
 
@@ -304,6 +365,7 @@ class ExcelWorksheet
 						$this->worksheet = $this->append('worksheet', array(), $document);
 						$this->worksheet->setAttributeNS(static::$namespaces['xmlns'], 'xmlns:r', static::$namespaces['relationships']);
 				}
+				$this->updateDocument();
 				return $this->worksheet;
 		}
 
