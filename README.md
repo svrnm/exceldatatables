@@ -95,4 +95,4 @@ examples demonstrates this case within a laravel application
 
 ### Contact ###
 
-For any questions you can contact Severin Neumann <severin.neumann@elearning-ag.de>
+For any questions you can contact Severin Neumann <s.neumann@elearning-ag.de>
