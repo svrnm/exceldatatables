@@ -1,5 +1,5 @@
 {
-    "name": "eLearningAG/exceldatatables",
+    "name": "elearning-ag/exceldatatables",
     "description": "Replace a worksheet within an Excel workbook (.xlsx) without changing any other properties of the file",
 	"keywords": ["excel","php","datatables","worksheet","workbook","xls","spreadsheet"],
     "license": "GPL-3.0",
