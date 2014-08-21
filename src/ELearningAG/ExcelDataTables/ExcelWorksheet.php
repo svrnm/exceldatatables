@@ -269,7 +269,13 @@ class ExcelWorksheet
 						break;
 				// case self::COLUMN_TYPE_STRING:
 				default:
-						return '<c t="inlineStr"><is><t>'.$column[1].'</t></is></c>';
+					return '<c t="inlineStr"><is><t>'.strtr($column[1], array(
+						"&" => "&amp;",
+						"<" => "&lt;",
+						">" => "&gt;",
+						'"' => "&quot;",
+						"'" => "&apos;",
+					)).'</t></is></c>';	
 						break;
 				}
 		}
