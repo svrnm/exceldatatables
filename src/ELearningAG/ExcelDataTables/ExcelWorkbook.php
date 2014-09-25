@@ -70,6 +70,10 @@ class ExcelWorkbook implements \Countable
 				$this->targetFilename = $filename;
 		}
 
+		public function __destruct() {
+				$this->getXLSX()->close();
+		}
+
 		/**
 		 * Turn on auto saving
 		 *
@@ -230,12 +234,12 @@ class ExcelWorkbook implements \Countable
 						$lastId = 0;
 						while($this->getXLSX()->statName('xl/worksheets/sheet'.($lastId+1).'.xml') !== false) {
 								$lastId++;
-						}   
+						}
 						$id = $lastId + $id;
-				} 
+				}
 				$old = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
 				if($old === false) {
-						throw new \Exception('Appending new sheets is not yet implemented');
+						throw new \Exception('Appending new sheets is not yet implemented: ' . $id .', '. $this->srcFilename.', '.$this->targetFilename);
 				} else {
 						$document = new \DOMDocument();
 						$document->loadXML($old);					
@@ -243,7 +247,8 @@ class ExcelWorkbook implements \Countable
 						$worksheet->setDateTimeFormatId($this->getDateTimeFormatId());
 						$newSheetData = $document->importNode( $worksheet->getDocument()->getElementsByTagName('sheetData')->item(0), true );
 						$oldSheetData->parentNode->replaceChild($newSheetData, $oldSheetData);
-						$this->getXLSX()->addFromString('xl/worksheets/sheet'.$id.'.xml', $document->saveXML());
+						$xml = $document->saveXML();
+						$this->getXLSX()->addFromString('xl/worksheets/sheet'.$id.'.xml', $xml);
 				}
 				if($this->isAutoSaveEnabled()) {
 						$this->save();
@@ -276,7 +281,6 @@ class ExcelWorkbook implements \Countable
 						throw new \Exception('File does not exists: '.$this->srcFilename);
 				}
 				if($this->srcFilename !== $this->targetFilename) {
-						// copy($this->srcFilename, $this->targetFilename);
 						file_put_contents($this->targetFilename, file_get_contents($this->srcFilename));
 						$this->srcFilename = $this->targetFilename;
 				}

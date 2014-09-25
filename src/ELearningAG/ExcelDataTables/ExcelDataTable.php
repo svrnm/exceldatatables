@@ -18,7 +18,7 @@ namespace ELearningAG\ExcelDataTables;
  */
 class ExcelDataTable
 {
-	
+
 		/**
 		 * The internal representation of the data table
 		 *
@@ -393,10 +393,11 @@ class ExcelDataTable
 				$xlsx = new ExcelWorkbook($srcFilename);
 				$worksheet = new ExcelWorksheet();
 				if(!is_null($targetFilename)) {
-					$xlsx->setFilename($targetFilename);
+						$xlsx->setFilename($targetFilename);
 				}
 				$worksheet->addRows($this->toArray());
 				$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName)->save();
+				unset($xlsx);
 				return $this;
 		}
 

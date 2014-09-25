@@ -75,9 +75,9 @@ class ExcelWorksheet
 		const COLUMN_TYPE_DATETIME = 2;
 
 		protected static $columnTypes = array(
-			'string' => 0,
-			'number' => 1,
-			'datetime' => 2
+				'string' => 0,
+				'number' => 1,
+				'datetime' => 2
 		);
 
 		/**
@@ -259,7 +259,7 @@ class ExcelWorksheet
 				//return $this->addStringColumnToRow($row, (string)$column);
 		}
 
-		protected function toXMLColumn($column) {
+		public function toXMLColumn($column) {
 				switch($column[0]) {
 				case self::COLUMN_TYPE_NUMBER:
 						return '<c><v>'.$column[1].'</v></c>';
@@ -267,17 +267,21 @@ class ExcelWorksheet
 				case self::COLUMN_TYPE_DATETIME:
 						return '<c s="'.$this->dateTimeFormatId.'"><v>'.static::convertDate($column[1]).'</v></c>';
 						break;
-				// case self::COLUMN_TYPE_STRING:
+						// case self::COLUMN_TYPE_STRING:
 				default:
-					return '<c t="inlineStr"><is><t>'.strtr($column[1], array(
-						"&" => "&amp;",
-						"<" => "&lt;",
-						">" => "&gt;",
-						'"' => "&quot;",
-						"'" => "&apos;",
-					)).'</t></is></c>';	
+						return '<c t="inlineStr"><is><t>'.strtr($column[1], array(
+								"&" => "&amp;",
+								"<" => "&lt;",
+								">" => "&gt;",
+								'"' => "&quot;",
+								"'" => "&apos;",
+						)).'</t></is></c>';
 						break;
 				}
+		}
+
+		public function incrementRowCounter() {
+				return $this->rowCounter++;
 		}
 
 		protected function updateDocument() {
@@ -287,16 +291,18 @@ class ExcelWorksheet
 						$this->rowCounter = 1;
 						$fragment = $this->document->createDocumentFragment();
 						$xml = implode('', array_map(function($row) use ($self) {
-								return '<row r="'.($self->rowCounter++).'">'.implode('', array_map(function($column) use ($self) {
+								return '<row r="'.($self->incrementRowCounter()).'">'.implode('', array_map(function($column) use ($self) {
 										return $self->toXMLColumn($column);
 								}, $row)).'</row>';
 						}, $this->rows));
-						$fragment->appendXML($xml);
-								$this->getSheetData()->parentNode->replaceChild(
-										$s = $this->getSheetData()->cloneNode( false ),
-										$this->getSheetData()
-								);
-								$this->sheetData = $s;
+						if(!$fragment->appendXML($xml)) {
+								throw new \Exception('Parsing XML failed');
+						}
+						$this->getSheetData()->parentNode->replaceChild(
+								$s = $this->getSheetData()->cloneNode( false ),
+								$this->getSheetData()
+						);
+						$this->sheetData = $s;
 						$this->getSheetData()->appendChild($fragment);
 
 				}

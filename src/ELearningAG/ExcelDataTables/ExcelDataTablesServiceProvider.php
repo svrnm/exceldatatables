@@ -10,29 +10,29 @@ use Illuminate\Support\ServiceProvider;
  * @copyright 2014 die eLearning AG
  */
 class ExcelDataTablesServiceProvider extends ServiceProvider {
-	
 
-	/**
-	 * Register the service provider.
-	 *
-	 * @return void
-	 */
-	public function register()
-	{
-		$this->app['exceldatatables'] = $this->app->share(function($app) {
-			return new ExcelDataTable();
-		});
-	}
 
-	/**
-	 * Get the services provided by the provider.
-	 *
-	 * @return array
-	 */
-	public function provides() 
-	{
-		return array(
-			'exceldatatables'
-		);
-	}
+		/**
+		 * Register the service provider.
+		 *
+		 * @return void
+		 */
+		public function register()
+		{
+				$this->app['exceldatatables'] = $this->app->share(function($app) {
+						return new ExcelDataTable();
+				});
+		}
+
+		/**
+		 * Get the services provided by the provider.
+		 *
+		 * @return array
+		 */
+		public function provides() 
+		{
+				return array(
+						'exceldatatables'
+				);
+		}
 }
