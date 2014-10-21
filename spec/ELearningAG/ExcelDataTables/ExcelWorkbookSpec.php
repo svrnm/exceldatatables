@@ -27,7 +27,7 @@ class ExcelWorkbookSpec extends ObjectBehavior
 		}
 
 		function letGo() {
-			unlink($this->testFilename);
+	#		unlink($this->testFilename);
 		}
 
 		function it_is_initializable()

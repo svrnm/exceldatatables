@@ -71,7 +71,9 @@ class ExcelWorkbook implements \Countable
 		}
 
 		public function __destruct() {
-				$this->getXLSX()->close();
+				if(!is_null($this->xlsx)) {
+					$this->getXLSX()->close();
+				}
 		}
 
 		/**
