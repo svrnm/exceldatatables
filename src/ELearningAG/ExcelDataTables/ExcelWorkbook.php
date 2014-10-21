@@ -178,24 +178,27 @@ class ExcelWorkbook implements \Countable
 		}
 
 		/**
-		 * Extract a date time format from the styles.xml. Some guessing is used to find
-		 * a matching id. If no format is find, the id of the GENERAL format is returned
+		 * Extract or create a date time format from the styles.xml. Some guessing is used to find
+		 * a matching id. If no interesting format is find, a new format is created
 		 *
 		 * @return int
 		 */
-		protected function getDateTimeFormatId() {
+		protected function dateTimeFormatId() {
 				$formats = $this->getStyles()->getElementsByTagName('numFmt');
 				$exists = false;
-				$generalId = 0;
-				$foundId = 0;
+				$generalId = 14;
+				$numFmtId = false;
+				$highestId = 164;
 				$maxScore = 3;
 				for($id = 0; $id < $formats->length; ++$id) {
 						$format = $formats->item($id);
 						$code = strtoupper($format->getAttribute('formatCode'));
-						if($code === 'GENERAL') {
-								$generalID = $id;
-						} elseif($code === "DD/MM/YYYY\ HH:MM:SS") {
-								$foundId = $id;
+						$currentId = $format->getAttribute('numFmtId');
+						if($currentId > $highestId) {
+								$highestId = $currentId;
+						}
+						if($code === "DD/MM/YYYY\ HH:MM:SS") {
+								$numFmtId = $currentId;
 								$exists = true;
 						} else {
 								// Do some "guessing" if the current format is "good enough"
@@ -210,15 +213,42 @@ class ExcelWorkbook implements \Countable
 								if($score > $maxScore) {
 										$maxScore = $score;
 										$exists = true;
-										$foundId = $id;
+										$numFmtId = $currentId;
 								}
 						}
 				}
-				if($exists) {
-						return $foundId;
-				} else {
-						return $generalId;
+				if($numFmtId === false) {
+						$numFmtId = $highestId+1;
+						$numFmts = $this->getStyles()->getElementsByTagName('numFmts')->item(0);
+
+						$numFmt = $this->getStyles()->createElement('numFmt');
+						$numFmt->setAttribute('numFmtId', $numFmtId);
+						$numFmt->setAttribute('formatCode', 'DD/MM/YYYY\ HH:MM:SS');
+
+						$numFmts->appendChild($numFmt);
+						$numFmts->setAttribute('count', $numFmts->getAttribute('count')+1);
 				}
+
+				$cellXfs = $this->getStyles()->getElementsByTagName('cellXfs')->item(0);
+				//$xfs = $this->getStyles()->getElementsByTagName('xf');
+				$xfs = $cellXfs->childNodes;
+				$result = false;
+				for($i = 0; $i < $xfs->length; $i++) {
+						$xf = $xfs->item($i);
+						if($xf->getAttribute('numFmtId') == $numFmtId) {
+								$result = $i;
+						}
+				}
+				if($result === false) {
+						$result = $cellXfs->getAttribute('count');
+						$xf = $this->getStyles()->createElement('xf');
+						$xf->setAttribute('numFmtId', $numFmtId);
+						$xf->setAttribute('applyNumberFormat', 1);
+						$cellXfs->appendChild($xf);
+						$cellXfs->setAttribute('count', $result+1);
+				}
+				$this->saveStyles();
+				return $result;
 		}
 
 		/**
@@ -246,7 +276,7 @@ class ExcelWorkbook implements \Countable
 						$document = new \DOMDocument();
 						$document->loadXML($old);					
 						$oldSheetData = $document->getElementsByTagName('sheetData')->item(0);
-						$worksheet->setDateTimeFormatId($this->getDateTimeFormatId());
+						$worksheet->setDateTimeFormatId($this->dateTimeFormatId());
 						$newSheetData = $document->importNode( $worksheet->getDocument()->getElementsByTagName('sheetData')->item(0), true );
 						$oldSheetData->parentNode->replaceChild($newSheetData, $oldSheetData);
 						$xml = $document->saveXML();

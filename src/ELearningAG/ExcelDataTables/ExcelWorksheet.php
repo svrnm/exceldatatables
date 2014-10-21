@@ -110,7 +110,7 @@ class ExcelWorksheet
 		 *
 		 * @see https://github.com/PHPOffice/PHPExcel/blob/78a065754dd0b233d67f26f1ef8a8a66cd449e7f/Classes/PHPExcel/Shared/Date.php
 		 */
-		public static function convertDate(\DateTimeInterface $date) {
+		public static function convertDate(\DateTime $date) {
 
 				$year = $date->format('Y');
 				$month = $date->format('m');
@@ -250,7 +250,7 @@ class ExcelWorksheet
 						} elseif(is_numeric($column)) {
 								$this->rows[$row][] = array(self::COLUMN_TYPE_NUMBER, $column);
 								//return $this->addNumberColumnToRow($row, $column);
-						} elseif($column instanceof \DateTimeInterface) {
+						} elseif($column instanceof \DateTime) {
 								$this->rows[$row][] = array(self::COLUMN_TYPE_DATETIME, $column);
 								//return $this->addDateTimeColumnToRow($row, $column);
 						} else {
