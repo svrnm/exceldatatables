@@ -4,9 +4,6 @@
 	"keywords": ["excel","php","datatables","worksheet","workbook","xls","spreadsheet"],
     "license": "GPL-3.0",
     "authors": [
-		{
-			"name": "Die eLearning AG",
-		},
         {
             "name": "Severin Neumann",
             "email": "severin.neumann@altmuehlnet.de"
