@@ -1,15 +1,15 @@
 <?php
 
-namespace ELearningAG\ExcelDataTables;
+namespace Svrnm\ExcelDataTables;
 
 /**
  * This class is a simple representation of a excel workbook. It expects
  * a xlsx formatted spreadsheet as paramater and overwrites(!) existing
  * worksheets with new data.
  *
- * @author Severin Neumann <s.neumann@elearning-ag.de>
+ * @author Severin Neumann <severin.neumann@altmuehlnet.de>
  * @copyright 2014 die eLearning AG
- * @license GPL-3.0 
+ * @license GPL-3.0
  */
 class ExcelWorkbook implements \Countable
 {
@@ -274,7 +274,7 @@ class ExcelWorkbook implements \Countable
 						throw new \Exception('Appending new sheets is not yet implemented: ' . $id .', '. $this->srcFilename.', '.$this->targetFilename);
 				} else {
 						$document = new \DOMDocument();
-						$document->loadXML($old);					
+						$document->loadXML($old);
 						$oldSheetData = $document->getElementsByTagName('sheetData')->item(0);
 						$worksheet->setDateTimeFormatId($this->dateTimeFormatId());
 						$newSheetData = $document->importNode( $worksheet->getDocument()->getElementsByTagName('sheetData')->item(0), true );
@@ -306,7 +306,7 @@ class ExcelWorkbook implements \Countable
 		 *
 		 * @throws Excepetion
 		 * @return $this
-		 */ 
+		 */
 		protected function openXLSX() {
 				$this->xlsx = new \ZipArchive;
 				if(!file_exists($this->srcFilename) && is_readable($this->srcFilename)) {
@@ -324,7 +324,7 @@ class ExcelWorkbook implements \Countable
 		}
 
 		/**
-		 * Save the modifications 
+		 * Save the modifications
 		 *
 		 * @return $this
 		 */

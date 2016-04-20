@@ -31,7 +31,7 @@
 	}
 
 	$start = microtime(true);
-	$dataTable = new ELearningAG\ExcelDataTables\ExcelDataTable();
+	$dataTable = new Svrnm\ExcelDataTables\ExcelDataTable();
 	$dataTable->showHeaders();
 	$dataTable->addRows($data);
 	$time0 = microtime(true) - $start;

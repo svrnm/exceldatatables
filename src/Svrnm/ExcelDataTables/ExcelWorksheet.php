@@ -1,6 +1,6 @@
 <?php
 
-namespace ELearningAG\ExcelDataTables;
+namespace Svrnm\ExcelDataTables;
 
 /**
  * An instance of this class represents a simple(!) ExcelWorkseeht in the spreadsheetml format.
@@ -8,16 +8,16 @@ namespace ELearningAG\ExcelDataTables;
  * adds its values to the worksheet. Finally the worksheet can be exported to XML using the toXML()
  * method
  *
- * @author Severin Neumann <s.neumann@elearning-ag.de>
+ * @author Severin Neumann <s.neumann@altmuehlnet.de>
  * @copyright 2014 die eLearning AG
- * @license GPL-3.0 
+ * @license GPL-3.0
  */
 class ExcelWorksheet
 {
 		/**
 		 * This namespaces are used to setup the XML document.
 		 *
-		 * @var array 
+		 * @var array
 		 */
 		protected static $namespaces = array(
 				"spreadsheets" => "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
@@ -143,7 +143,7 @@ class ExcelWorksheet
 		 * By default the XML document is generated without format. This can be
 		 * changed with this function.
 		 *
-		 * @param $value 
+		 * @param $value
 		 * @return $this
 		 */
 		public function setFormatOutput($value = true) {
@@ -240,9 +240,9 @@ class ExcelWorksheet
 		 * @return \DOMElement
 		 */
 		protected function addColumnToRow($row, $column) {
-				if(is_array($column) 
-						&& isset($column['type']) 
-						&& isset($column['value']) 
+				if(is_array($column)
+						&& isset($column['type'])
+						&& isset($column['value'])
 						&& in_array($column['type'], array('string', 'number', 'datetime'))) {
 								//$function = 'add'.ucfirst($column['type']).'ColumnToRow';
 								//return $this->$function($row, $column['value']);
@@ -364,10 +364,10 @@ class ExcelWorksheet
 		 */
 		protected function createElement($name) {
 				return $this->getDocument()->createElementNS(static::$namespaces['spreadsheets'], $name);
-		}	
+		}
 
 		/**
-		 * Returns the DOMElement representation of the worksheet 
+		 * Returns the DOMElement representation of the worksheet
 		 *
 		 * @return \DOMElement
 		 */
@@ -394,7 +394,7 @@ class ExcelWorksheet
 		 * @param string name
 		 * @param array attributes
 		 * @param \DOMElement parent
-		 * @return \DOMElement 
+		 * @return \DOMElement
 		 */
 		protected function append($name, $attributes = array(), $parent = null) {
 				if(is_null($parent)) {

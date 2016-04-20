@@ -20,7 +20,7 @@ Use composer to add this repository to your dependencies:
 ```JSON
 {
 	"require": {
-		"elearning-ag/exceldatatables": "dev-master"
+		"svrnm/exceldatatables": "dev-master"
 	}
 }
 ```
@@ -31,7 +31,7 @@ If you use the laravel framework you can additionally add the ServiceProvider to
 ...
 'providers' => array(
 	...
-	'ELearningAG\ExcelDataTables\ExcelDataTablesServiceProvider'
+	'Svrnm\ExcelDataTables\ExcelDataTablesServiceProvider'
 )
 ...
 ```
@@ -47,7 +47,7 @@ contained as `example.php` within the folder "examples/":
 <?php
         require_once('../vendor/autoload.php');
 		// Create a new instance 
-        $dataTable = new ELearningAG\ExcelDataTables\ExcelDataTable();
+        $dataTable = new Svrnm\ExcelDataTables\ExcelDataTable();
 		// Specify the source file
         $in = 'spec.xlsx';
 		// Specify the output file
@@ -74,7 +74,7 @@ examples demonstrates this case within a laravel application
 	class ReportController extends Controller {
 		protected $dataTable;
 
-	    public function __construct(\ELearningAG\ExcelDataTables\ExcelDataTable $dataTable) {
+	    public function __construct(\Svrnm\ExcelDataTables\ExcelDataTable $dataTable) {
 	        $this->dataTable = $dataTable;
 		}
 
@@ -95,4 +95,4 @@ examples demonstrates this case within a laravel application
 
 ### Contact ###
 
-For any questions you can contact Severin Neumann <s.neumann@elearning-ag.de>
+For any questions you can contact Severin Neumann <severin.neumann@altmuehlnet.de>

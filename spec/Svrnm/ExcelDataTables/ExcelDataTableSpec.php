@@ -1,6 +1,6 @@
 <?php
 
-namespace spec\ELearningAG\ExcelDataTables;
+namespace spec\Svrnm\ExcelDataTables;
 
 use PhpSpec\ObjectBehavior;
 use Prophecy\Argument;
@@ -8,7 +8,7 @@ use Prophecy\Argument;
 /**
  * Specification for the class ExcelDataTables
  *
- * @author Severin Neumann <s.neumann@elearning-ag.de>
+ * @author Severin Neumann <severin.neumann@altmuehlnet.de>
  * @copyright 2014 die eLearning AG
  * @license GPL-3.0
  */
@@ -19,12 +19,12 @@ class ExcelDataTableSpec extends ObjectBehavior
 		 */
 		function it_is_initializable()
 		{
-				$this->shouldHaveType('ELearningAG\ExcelDataTables\ExcelDataTable');
+				$this->shouldHaveType('Svrnm\ExcelDataTables\ExcelDataTable');
 		}
 
 		/**
 		 * The data table can have a special header row which is set using
-		 * setHeaders. 
+		 * setHeaders.
 		 */
 		function it_has_headers() {
 				$headers = array("A" => "A", "B" => "B", "C" => "C");
@@ -45,7 +45,7 @@ class ExcelDataTableSpec extends ObjectBehavior
 
 		/**
 		 * An assocative array is converted into a single row. The keys of the array
-		 * are internaly used as column identifier. 
+		 * are internaly used as column identifier.
 		 *
 		 * Adding a second assocative array which does not have entires in all columns
 		 * will introduce empty cells.

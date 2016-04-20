@@ -1,6 +1,6 @@
 <?php
 
-namespace spec\ELearningAG\ExcelDataTables;
+namespace spec\Svrnm\ExcelDataTables;
 
 use PhpSpec\ObjectBehavior;
 use Prophecy\Argument;
@@ -8,7 +8,7 @@ use Prophecy\Argument;
 /**
  * Specification for the class ExcelWorksheet.
  *
- * @author Severin Neumann <s.neumann@elearning-ag.de>
+ * @author Severin Neumann <severin.neumann@altmuehlnet.de>
  * @copyright 2014 die eLearning AG
  * @license GPL-3.0
  */
@@ -18,7 +18,7 @@ class ExcelWorksheetSpec extends ObjectBehavior
 		static function wrapWorksheet($inner) {
 			$xml = '<?xml version="1.0" encoding="utf-8" standalone="yes"?>'.PHP_EOL;
 			$xml .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
-			
+
 			$xml .= $inner;
 
 			$xml .= '</worksheet>'.PHP_EOL;
@@ -36,10 +36,10 @@ class ExcelWorksheetSpec extends ObjectBehavior
 
 		function it_is_initializable()
 		{
-				$this->shouldHaveType('ELearningAG\ExcelDataTables\ExcelWorksheet');
+				$this->shouldHaveType('Svrnm\ExcelDataTables\ExcelWorksheet');
 		}
 
-		function it_converts_to_xml() 
+		function it_converts_to_xml()
 		{
 				$this->setupDefaultDocument()->toXML()->shouldReturn(self::wrapWorksheet('<sheetData/>'));
 		}
@@ -64,7 +64,7 @@ class ExcelWorksheetSpec extends ObjectBehavior
 				$this->addRow()->addRow()->toXML()->shouldReturn(self::wrapSheetData('<row r="1"/><row r="2"/>'));;
 		}
 
-		function it_adds_strings_to_string_columns() 
+		function it_adds_strings_to_string_columns()
 		{
 				$this->addRow(array('a', 'b', 'c'))->toXML()->shouldReturn(self::wrapSheetData(self::wrapRow('<c t="inlineStr"><is><t>a</t></is></c><c t="inlineStr"><is><t>b</t></is></c><c t="inlineStr"><is><t>c</t></is></c>', 1)));
 		}

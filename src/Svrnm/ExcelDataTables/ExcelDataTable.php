@@ -1,6 +1,6 @@
-<?php 
+<?php
 
-namespace ELearningAG\ExcelDataTables;
+namespace Svrnm\ExcelDataTables;
 
 /**
  * The class ExcelDataTable converts given rows (e.g. arrays, objects) into a SpreadsheetML
@@ -12,7 +12,7 @@ namespace ELearningAG\ExcelDataTables;
  * $excelDataTable = new ExcelDataTable();
  * $excelDataTable->addRows($data)->attachToFile('./example.xlsx');
  *
- * @author Severin Neumann <s.neumann@elearning-ag.de>
+ * @author Severin Neumann <severin.neumann@altmuehlnet.de>
  * @copyright 2014 die eLearning AG
  * @license GPL-3.0
  */
@@ -41,7 +41,7 @@ class ExcelDataTable
 		protected $headerNumbers = array();
 
 		/**
-		 * The (optional) labels of the data column. If $headersVisible is true 
+		 * The (optional) labels of the data column. If $headersVisible is true
 		 * these are written in the first row ("Row 1" in Excel)
 		 *
 		 * @var array
@@ -56,7 +56,7 @@ class ExcelDataTable
 		protected $failedCells = array();
 
 		/**
-		 * True if the headers are defined. 
+		 * True if the headers are defined.
 		 *
 		 * @var boolean
 		 */
@@ -76,7 +76,7 @@ class ExcelDataTable
 		 */
 		protected $sheetId = null;
 
-		/** 
+		/**
 		 * The name of the sheet when attachToFile is called
 		 *
 		 * @var string
@@ -109,7 +109,7 @@ class ExcelDataTable
 		 * Add a new row to the data table. $row is expected to be an assocative array
 		 * or an object, the keys/property names are used to choose the correct
 		 * column in the following manner:
-		 * 
+		 *
 		 * - If no header property for the data table is specified, the given $row is used to define the header
 		 * - If a header property for the date table is specified, the given $row is added accordingly
 		 *
@@ -156,7 +156,7 @@ class ExcelDataTable
 		 * Convert the name of a header/column into the equivalent number. Returns false if
 		 * the given name can't be converted.
 		 *
-		 * @param string $name 
+		 * @param string $name
 		 * @return int|boolean
 		 */
 		protected function headerNameToHeaderNumber($name) {
@@ -250,7 +250,7 @@ class ExcelDataTable
 		 */
 		public function setHeaders($header) {
 				foreach((array)$header as $name => $label) {
-						$this->addHeader($name, $label);	
+						$this->addHeader($name, $label);
 				}
 				$this->headersDefined = true;
 				return $this;
@@ -275,7 +275,7 @@ class ExcelDataTable
 		 *
 		 * NOT YET IMPLEMENTED
 		 *
-		 * @param int|string columnKey 
+		 * @param int|string columnKey
 		 * @param string type
 		 * @return this
 		 */
@@ -285,7 +285,7 @@ class ExcelDataTable
 		}
 
 		/**
-		 * Iterate over a given row and convert it into a dense representation 
+		 * Iterate over a given row and convert it into a dense representation
 		 * for export.
 		 *
 		 * @param array arr
@@ -324,15 +324,15 @@ class ExcelDataTable
 		 */
 		public function toCsv($separator = ',', $quote = '', $newLine = PHP_EOL) {
 				return implode(
-						$newLine, 
+						$newLine,
 						array_map(
-								function($elem) use($separator, $quote) { 
+								function($elem) use($separator, $quote) {
 										$s = $quote.$separator.$quote;
-										return $quote.implode($s, $elem).$quote; 
-								}, 
+										return $quote.implode($s, $elem).$quote;
+								},
 										$this->toArray()
 								)
-						); 
+						);
 
 		}
 
@@ -347,9 +347,9 @@ class ExcelDataTable
 		}
 
 		/**
-		 * Return a string representation of the data table. 
+		 * Return a string representation of the data table.
 		 *
-		 * This is currently equivalent to a call of toCsv(), but might change in future releases. 
+		 * This is currently equivalent to a call of toCsv(), but might change in future releases.
 		 *
 		 * @return string
 		 */
@@ -402,7 +402,7 @@ class ExcelDataTable
 		}
 
 		/**
-		 * This functions takes an XLSX-file and an multidimensional and returns a string representation of the 
+		 * This functions takes an XLSX-file and an multidimensional and returns a string representation of the
 		 * XLSX file including the data table.
 		 * This function is especially useful if the file should be provided as download for a http request.
 		 *

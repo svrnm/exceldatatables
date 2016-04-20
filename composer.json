@@ -1,16 +1,15 @@
 {
-    "name": "elearning-ag/exceldatatables",
+    "name": "svrnm/exceldatatables",
     "description": "Replace a worksheet within an Excel workbook (.xlsx) without changing any other properties of the file",
 	"keywords": ["excel","php","datatables","worksheet","workbook","xls","spreadsheet"],
     "license": "GPL-3.0",
     "authors": [
 		{
 			"name": "Die eLearning AG",
-			"email": "info@elearning-ag.de"
 		},
         {
             "name": "Severin Neumann",
-            "email": "s.neumann@elearning-ag.de"
+            "email": "severin.neumann@altmuehlnet.de"
         }
     ],
     "require": {
@@ -22,7 +21,7 @@
 	},
     "autoload": {
         "psr-0": {
-            "ELearningAG\\ExcelDataTables": "src/"
+            "Svrnm\\ExcelDataTables": "src/"
         }
     },
     "minimum-stability": "dev"

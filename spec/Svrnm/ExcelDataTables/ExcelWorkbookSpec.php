@@ -1,16 +1,16 @@
 <?php
 
-namespace spec\ELearningAG\ExcelDataTables;
+namespace spec\Svrnm\ExcelDataTables;
 
 use PhpSpec\ObjectBehavior;
 use Prophecy\Argument;
-use ELearningAG\ExcelDataTables\ExcelWorksheet;
+use Svrnm\ExcelDataTables\ExcelWorksheet;
 use org\bovigo\vfs\vfsStream;
 
 /**
  * Specification for the class ExcelWorkbook
  *
- * @author Severin Neumann <s.neumann@elearning-ag.de>
+ * @author Severin Neumann <severin.neumann@altmuehlnet.de>
  * @copyright 2014 die eLearning AG
  * @license GPL-3.0
  */
@@ -18,10 +18,10 @@ use org\bovigo\vfs\vfsStream;
 class ExcelWorkbookSpec extends ObjectBehavior
 {
 		protected $testFilename;
-		
+
 		function let() {
 				/* vfsStream and ZipArchive are not working together... */
-				$this->testFilename = sys_get_temp_dir() . '/exceldatatables-test-spec.xlsx'; 
+				$this->testFilename = sys_get_temp_dir() . '/exceldatatables-test-spec.xlsx';
 				copy('./examples/spec.xlsx', $this->testFilename);
 				$this->beConstructedWith($this->testFilename);
 		}
@@ -32,7 +32,7 @@ class ExcelWorkbookSpec extends ObjectBehavior
 
 		function it_is_initializable()
 		{
-				$this->shouldHaveType('ELearningAG\ExcelDataTables\ExcelWorkbook');
+				$this->shouldHaveType('Svrnm\ExcelDataTables\ExcelWorkbook');
 		}
 
 		function it_provides_a_workbook_xml() {
@@ -72,7 +72,7 @@ class ExcelWorkbookSpec extends ObjectBehavior
 						array( new \DateTime("2014-08-14"), 21, 13),
 				));
 				$this->addWorksheet($worksheet, 2)->save();
-				/* TODO: Validate?! */	
+				/* TODO: Validate?! */
 
 		}
 

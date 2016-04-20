@@ -1,11 +1,11 @@
-<?php namespace ELearningAG\ExcelDataTables;
+<?php namespace Svrnm\ExcelDataTables;
 
 use Illuminate\Support\ServiceProvider;
 
 /**
  * Laravel ExcelDataTables ServiceProvider
  *
- * @author Severin Neumann <s.neumann@elearning-ag.de>
+ * @author Severin Neumann <severin.neumann@altmuehlnet.de>
  * @license GPL-3.0
  * @copyright 2014 die eLearning AG
  */
@@ -29,7 +29,7 @@ class ExcelDataTablesServiceProvider extends ServiceProvider {
 		 *
 		 * @return array
 		 */
-		public function provides() 
+		public function provides()
 		{
 				return array(
 						'exceldatatables'

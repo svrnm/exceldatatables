@@ -1,6 +1,6 @@
 <?php
 	require_once('../vendor/autoload.php');
-	$dataTable = new ELearningAG\ExcelDataTables\ExcelDataTable();
+	$dataTable = new Svrnm\ExcelDataTables\ExcelDataTable();
 	$in = 'spec.xlsx';
 	$out = 'test.xlsx';
 	$data = array(
