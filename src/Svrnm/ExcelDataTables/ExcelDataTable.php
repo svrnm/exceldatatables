@@ -383,20 +383,26 @@ class ExcelDataTable
 		/**
 		 * Attach the data table to an existing xlsx file. The file location is given via the
 		 * first parameter. If a second parameter is given the source file will not be overwritten
-		 * and a new file will be created.
+		 * and a new file will be created. The third parameter can be used to force updating the
+		 * auto calculation in the excel workbook.
 		 *
 		 * @param string srcFilename
 		 * @param string|null targetFilename
+		 * @param bool|null forceAutoCalculation
 		 * @return $this
 		 */
-		public function attachToFile($srcFilename, $targetFilename = null) {
+		public function attachToFile($srcFilename, $targetFilename = null, $forceAutoCalculation = false) {
 				$xlsx = new ExcelWorkbook($srcFilename);
 				$worksheet = new ExcelWorksheet();
 				if(!is_null($targetFilename)) {
 						$xlsx->setFilename($targetFilename);
 				}
 				$worksheet->addRows($this->toArray());
-				$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName)->save();
+				$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName);
+				if($forceAutoCalculation) {
+					$xlsx->enableAutoCalculation($autoCalculation);
+				}
+				$xlsx->save();
 				unset($xlsx);
 				return $this;
 		}

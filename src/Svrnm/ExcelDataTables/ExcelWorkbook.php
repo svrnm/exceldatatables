@@ -60,6 +60,13 @@ class ExcelWorkbook implements \Countable
 		protected $autoSave = false;
 
 		/**
+		 * If true the workbook is modified to to contain the fullCalcOnLoad attribute
+		 *
+		 * @var boolean
+		 */
+		protected $autoCalculation = false;
+
+		/**
 		 * Instantiate a new object of the type ExcelWorkbook. Expects a filename which
 		 * contains a spreadsheet of type xlsx.
 		 *
@@ -79,11 +86,33 @@ class ExcelWorkbook implements \Countable
 		/**
 		 * Turn on auto saving
 		 *
-		 * @return $this.
+		 * @return $this
 		 */
 		public function enableAutoSave() {
 				$this->autoSave = true;
 				return $this;
+		}
+
+		/**
+		 * Turn on auto calculation
+		 *
+		 * @return $this
+		 */
+		public function enableAutoCalculation($value = true) {
+			$this->autoCalculation = (bool)$value;
+
+			$calcPr = $this->getWorkbook()->getElementsByTagName('calcPr')->item(0);
+
+			if(is_null($calcPr)) {
+				$calcPr = $this->getWorkbook()->createElement('calcPr');
+			}
+
+
+			$calcPr->setAttribute('fullCalcOnLoad', $this->autoCalculation ? '1' : '0');
+
+			$this->saveWorkbook();
+
+			return $this;
 		}
 
 		/**
@@ -220,6 +249,10 @@ class ExcelWorkbook implements \Countable
 				if($numFmtId === false) {
 						$numFmtId = $highestId+1;
 						$numFmts = $this->getStyles()->getElementsByTagName('numFmts')->item(0);
+
+						if(is_null($numFmts)) {
+							$numFmts = $this->getStyles()->createElement('numFmts');
+						}
 
 						$numFmt = $this->getStyles()->createElement('numFmt');
 						$numFmt->setAttribute('numFmtId', $numFmtId);
@@ -360,6 +393,19 @@ class ExcelWorkbook implements \Countable
 						$this->styles->loadXML($this->getXLSX()->getFromName('xl/styles.xml'));
 				}
 				return $this->styles;
+		}
+
+		/**
+		 * Save modifications of workbook.xml
+		 *
+		 * return @this
+		 */
+		public function saveWorkbook() {
+			$this->getXLSX()->addFromString('xl/workbook.xml', $this->getWorkbook()->saveXML());
+			if($this->isAutoSaveEnabled()) {
+				$this->save();
+			}
+			return $this;
 		}
 
 		/**

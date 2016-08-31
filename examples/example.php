@@ -10,5 +10,5 @@
 			array("Date" => new \DateTime('2014-01-04 16:00:00'), "Value 1" => 3, "Value 2" => -2),
 			array("Date" => new \DateTime('2014-01-05 17:00:00'), "Value 1" => 4, "Value 2" => -3),
 	);
-	$dataTable->showHeaders()->addRows($data)->attachToFile($in, $out);
+	$dataTable->showHeaders()->addRows($data)->attachToFile($in, $out, false);
 ?>
