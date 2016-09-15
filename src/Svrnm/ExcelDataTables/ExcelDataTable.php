@@ -400,7 +400,7 @@ class ExcelDataTable
 				$worksheet->addRows($this->toArray());
 				$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName);
 				if($forceAutoCalculation) {
-					$xlsx->enableAutoCalculation($autoCalculation);
+					$xlsx->enableAutoCalculation();
 				}
 				$xlsx->save();
 				unset($xlsx);
