@@ -84,6 +84,13 @@ class ExcelDataTable
 		protected $sheetName = 'Data';
 
 		/**
+		 * If set, regenerates the range in the data table with the specified name
+		 *
+		 * @var null|string
+		 */
+		protected $refreshTableRange = null;
+
+		/**
 		 * Instantiate a new ExcelDataTable object
 		 *
 		 */
@@ -402,6 +409,11 @@ class ExcelDataTable
 				if($forceAutoCalculation) {
 					$xlsx->enableAutoCalculation();
 				}
+
+				if ($this->refreshTableRange) {
+					$xlsx->refreshTableRange($this->refreshTableRange, count($this->data) + 1);
+				}
+
 				$xlsx->save();
 				unset($xlsx);
 				return $this;
@@ -422,4 +434,18 @@ class ExcelDataTable
 				unlink($targetFilename);
 				return $result;
 		}
+
+		/**
+		 * This function regenerates the range of the dynamic table to match
+		 * the total rows inserted
+		 *
+		 * @param string $table_name name of the excel table
+		 * @return $this
+		 */
+		public function refreshTableRange($table_name = 'Data')
+		{
+				$this->refreshTableRange = $table_name;
+				return $this;
+		}
+
 }
