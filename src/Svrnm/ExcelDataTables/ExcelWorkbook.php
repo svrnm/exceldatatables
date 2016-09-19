@@ -186,6 +186,38 @@ class ExcelWorkbook implements \Countable
 		}
 
 		/**
+		 *
+		 */
+		public function getSheetIdByName($name)
+		{
+				$sheets = $this->getWorkbook()->getElementsByTagName('sheet');
+				foreach ($sheets as $index => $sheet) {
+						if ($sheet->getAttribute('name') === $name) {
+								return $index + 1;
+						}
+				}
+				return null;
+		}
+
+		public function getTableIdByName($name)
+		{
+				$id = 1;
+				while ($this->getXLSX()->statName('xl/tables/table' . $id . '.xml') !== false) {
+
+						$xml = $this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml');
+						$dom = new \DOMDocument();
+						$dom->loadXML($xml);
+						$table = $dom->getElementsByTagName('table')->item(0);
+
+						if ($table->getAttribute('name') === $name) {
+								return $id;
+						}
+
+						$id++;
+				}
+		}
+
+		/**
 		 * Check if a worksheet with name $name already exists. If not $name is
 		 * returned. Otherwise $name_<i> is incremented until the name is unique.
 		 *
@@ -295,6 +327,11 @@ class ExcelWorkbook implements \Countable
 		 * @param string $name
 		 */
 		public function addWorksheet(ExcelWorksheet $worksheet, $id = null, $name = 'Data') {
+
+				if ($id === null) {
+						$id = $this->getSheetIdByName($name);
+				}
+
 				if(is_null($id) || $id <= 0) {
 						$lastId = 0;
 						while($this->getXLSX()->statName('xl/worksheets/sheet'.($lastId+1).'.xml') !== false) {
@@ -318,6 +355,31 @@ class ExcelWorkbook implements \Countable
 				if($this->isAutoSaveEnabled()) {
 						$this->save();
 				}
+				return $this;
+		}
+
+		/**
+		 * Refresh the table range in the excel with the number of rows added
+		 *
+		 * @param string $tableName Name of the table
+		 * @param int $numRows number of rows
+		 * @return $this
+		 */
+		public function refreshTableRange($tableName, $numRows)
+		{
+				$id = $this->getTableIdByName($tableName);
+				$document = new \DOMDocument();
+				$document->loadXML($this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml'));
+
+				$table = $document->getElementsByTagName('table')->item(0);
+				$ref = $table->getAttribute('ref');
+
+				$nref = preg_replace('/^(\w+\:[A-Z]+)(\d+)$/', '${1}' . $numRows, $ref);
+
+				$table->setAttribute('ref', $nref);
+
+				$this->getXLSX()->addFromString('xl/tables/table' . $id . '.xml', $document->saveXML());
+
 				return $this;
 		}
 
