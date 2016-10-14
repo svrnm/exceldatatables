@@ -383,6 +383,34 @@ class ExcelWorkbook implements \Countable
 				return $this;
 		}
 
+		public function getCalculatedColumns($tableName)
+		{
+				$id = $this->getTableIdByName($tableName);
+				if(isset($id)){
+						$document = new \DOMDocument();
+						$document->loadXML($this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml'));
+						$columns = $document->getElementsByTagName('tableColumn');
+						foreach($columns as $key => $column) {
+								if($column->getElementsByTagName("calculatedColumnFormula")->length){
+										$header = $column->getAttribute('name');
+										$formula = $column->nodeValue;
+										$calculatedColumn = array(
+												'index' => $key,
+												'header' => $header,
+												'content' => array(
+														$header => array(
+																'type' => 'formula',
+																'value' => $formula,
+														)
+												)
+										);
+										$calculatedColumns[] = $calculatedColumn;
+								}
+						}
+						return $calculatedColumns;
+				}
+		}
+
 		/**
 		 * Return the ZipArchive representation of the current workbook
 		 *

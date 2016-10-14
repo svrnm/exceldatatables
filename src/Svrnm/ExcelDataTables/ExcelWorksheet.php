@@ -73,11 +73,13 @@ class ExcelWorksheet
 		const COLUMN_TYPE_STRING = 0;
 		const COLUMN_TYPE_NUMBER = 1;
 		const COLUMN_TYPE_DATETIME = 2;
+		const COLUMN_TYPE_FORMULA = 3;
 
 		protected static $columnTypes = array(
 				'string' => 0,
 				'number' => 1,
-				'datetime' => 2
+				'datetime' => 2,
+				'formula' => 3
 		);
 
 		/**
@@ -243,7 +245,7 @@ class ExcelWorksheet
 				if(is_array($column)
 						&& isset($column['type'])
 						&& isset($column['value'])
-						&& in_array($column['type'], array('string', 'number', 'datetime'))) {
+						&& in_array($column['type'], array('string', 'number', 'datetime', 'formula'))) {
 								//$function = 'add'.ucfirst($column['type']).'ColumnToRow';
 								//return $this->$function($row, $column['value']);
 								$this->rows[$row][] = array(self::$columnTypes[$column['type']], $column['value']);
@@ -268,6 +270,9 @@ class ExcelWorksheet
 						return '<c s="'.$this->dateTimeFormatId.'"><v>'.static::convertDate($column[1]).'</v></c>';
 						break;
 						// case self::COLUMN_TYPE_STRING:
+				case self::COLUMN_TYPE_FORMULA:
+						return '<c><f>'.$column[1].'</f></c>';
+						break;
 				default:
 						return '<c t="inlineStr"><is><t>'.strtr($column[1], array(
 								"&" => "&amp;",
@@ -408,9 +413,17 @@ class ExcelWorksheet
 				return $element;
 		}
 
-		public function addRows($array)
-		{
-				foreach($array as $row) {
+		public function addRows($array, $calculatedColumns = null){
+				foreach($array as $key => $row) {
+						if(isset($calculatedColumns)){
+								foreach ($calculatedColumns as $calculatedColumn) {
+										if($key == 0){
+												array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['header']);
+										} else {
+												array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['content']);
+										}
+								}
+						}
 						$this->addRow($row);
 				}
 				return $this;

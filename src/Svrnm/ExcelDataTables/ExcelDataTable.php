@@ -91,6 +91,20 @@ class ExcelDataTable
 		protected $refreshTableRange = null;
 
 		/**
+		 * If set, injects column formulas into the output
+		 *
+		 * @var null|string
+		 */
+		protected $preserveFormulas = null;
+
+		/**
+		 * Variable to hold calculated columns from source
+		 *
+		 * @var null|array
+		 */
+		protected $calculatedColumns = null;
+
+		/**
 		 * Instantiate a new ExcelDataTable object
 		 *
 		 */
@@ -399,12 +413,18 @@ class ExcelDataTable
 		 * @return $this
 		 */
 		public function attachToFile($srcFilename, $targetFilename = null, $forceAutoCalculation = false) {
+				if ($this->preserveFormulas){
+						$temp_xlsx = new ExcelWorkbook($srcFilename);
+						$calculatedColumns = $temp_xlsx->getCalculatedColumns($this->preserveFormulas);
+						unset($temp_xlsx);
+				}
+
 				$xlsx = new ExcelWorkbook($srcFilename);
 				$worksheet = new ExcelWorksheet();
 				if(!is_null($targetFilename)) {
 						$xlsx->setFilename($targetFilename);
 				}
-				$worksheet->addRows($this->toArray());
+				$worksheet->addRows($this->toArray(), $calculatedColumns);
 				$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName);
 				if($forceAutoCalculation) {
 					$xlsx->enableAutoCalculation();
@@ -445,6 +465,18 @@ class ExcelDataTable
 		public function refreshTableRange($table_name = 'Data')
 		{
 				$this->refreshTableRange = $table_name;
+				return $this;
+		}
+
+		/**
+		 * This function extracts the existing column formulas and injects them.
+		 *
+		 * @param string $table_name name of the excel table
+		 * @return $this
+		 */
+		public function preserveFormulas($table_name = 'Data')
+		{
+				$this->preserveFormulas = $table_name;
 				return $this;
 		}
 
