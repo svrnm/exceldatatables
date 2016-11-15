@@ -413,6 +413,7 @@ class ExcelDataTable
 		 * @return $this
 		 */
 		public function attachToFile($srcFilename, $targetFilename = null, $forceAutoCalculation = false) {
+				$calculatedColumns = null;
 				if ($this->preserveFormulas){
 						$temp_xlsx = new ExcelWorkbook($srcFilename);
 						$calculatedColumns = $temp_xlsx->getCalculatedColumns($this->preserveFormulas);
