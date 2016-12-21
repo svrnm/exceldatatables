@@ -9,8 +9,7 @@ namespace Svrnm\ExcelDataTables;
  * method
  *
  * @author Severin Neumann <s.neumann@altmuehlnet.de>
- * @copyright 2014 die eLearning AG
- * @license GPL-3.0
+ * @license Apache-2.0 
  */
 class ExcelWorksheet
 {

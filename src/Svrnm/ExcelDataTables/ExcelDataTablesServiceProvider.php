@@ -6,8 +6,7 @@ use Illuminate\Support\ServiceProvider;
  * Laravel ExcelDataTables ServiceProvider
  *
  * @author Severin Neumann <severin.neumann@altmuehlnet.de>
- * @license GPL-3.0
- * @copyright 2014 die eLearning AG
+ * @license Apache-2.0
  */
 class ExcelDataTablesServiceProvider extends ServiceProvider {
 

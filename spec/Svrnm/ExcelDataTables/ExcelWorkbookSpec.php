@@ -11,8 +11,7 @@ use org\bovigo\vfs\vfsStream;
  * Specification for the class ExcelWorkbook
  *
  * @author Severin Neumann <severin.neumann@altmuehlnet.de>
- * @copyright 2014 die eLearning AG
- * @license GPL-3.0
+ * @license Apache-2.0
  */
 
 class ExcelWorkbookSpec extends ObjectBehavior

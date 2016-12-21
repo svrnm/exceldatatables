@@ -9,8 +9,7 @@ use Prophecy\Argument;
  * Specification for the class ExcelDataTables
  *
  * @author Severin Neumann <severin.neumann@altmuehlnet.de>
- * @copyright 2014 die eLearning AG
- * @license GPL-3.0
+ * @license Apache-2.0
  */
 class ExcelDataTableSpec extends ObjectBehavior
 {
