@@ -13,7 +13,7 @@ namespace Svrnm\ExcelDataTables;
  * $excelDataTable->addRows($data)->attachToFile('./example.xlsx');
  *
  * @author Severin Neumann <severin.neumann@altmuehlnet.de>
- * @license Apache-2.0
+ * @license Apache-2.0 
  */
 class ExcelDataTable
 {
@@ -300,7 +300,7 @@ class ExcelDataTable
 		 * @return this
 		 */
 		public function setColumnType($columnKey, $type) {
-
+				throw new \Exception('"setColumnType" is not yet implemented');
 				return $this;
 		}
 
@@ -462,8 +462,9 @@ class ExcelDataTable
 		 * @param string $table_name name of the excel table
 		 * @return $this
 		 */
-		public function refreshTableRange($table_name = 'Data')
+		public function refreshTableRange($table_name = null)
 		{
+				$table_name = !is_null($table_name) ? $table_name : $this->sheetName;
 				$this->refreshTableRange = $table_name;
 				return $this;
 		}
@@ -474,8 +475,9 @@ class ExcelDataTable
 		 * @param string $table_name name of the excel table
 		 * @return $this
 		 */
-		public function preserveFormulas($table_name = 'Data')
+		public function preserveFormulas($table_name)
 		{
+				$table_name = !is_null($table_name) ? $table_name : $this->sheetName;
 				$this->preserveFormulas = $table_name;
 				return $this;
 		}
