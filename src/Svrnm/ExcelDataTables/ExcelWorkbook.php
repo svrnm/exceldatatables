@@ -12,7 +12,6 @@ namespace Svrnm\ExcelDataTables;
  */
 class ExcelWorkbook implements \Countable
 {
-
 		/**
 		 * The source filename
 		 *
@@ -64,6 +63,13 @@ class ExcelWorkbook implements \Countable
 		 * @var boolean
 		 */
 		protected $autoCalculation = false;
+
+		/**
+		 * The default name of the sheet when attachToFile is called
+		 *
+		 * @var string
+		 */
+		protected $sheetName = 'Data';
 
 		/**
 		 * Instantiate a new object of the type ExcelWorkbook. Expects a filename which
@@ -317,7 +323,7 @@ class ExcelWorkbook implements \Countable
 
 		/**
 		 * Add a worksheet into the workbook with id $id and name $name. If $id is null the last
-		 * worksheet is replaced. If $name is empty, its default value is 'Data'.
+		 * worksheet is replaced. If $name is empty, its default value is set to the default.
 		 *
 		 * Currently this replaces an existing worksheet. Adding new worksheets is not yet supported
 		 *
@@ -325,22 +331,22 @@ class ExcelWorkbook implements \Countable
 		 * @param int $id
 		 * @param string $name
 		 */
-		public function addWorksheet(ExcelWorksheet $worksheet, $id = null, $name = 'Data') {
-
-				if ($id === null) {
-						$id = $this->getSheetIdByName($name);
-				}
+		public function addWorksheet(ExcelWorksheet $worksheet, $id = null, $name = null) {
+				$name = !is_null($name) ? $name : $this->sheetName;
+				if ($id === null) $id = $this->getSheetIdByName($name);
 
 				if(is_null($id) || $id <= 0) {
-						$lastId = 0;
-						while($this->getXLSX()->statName('xl/worksheets/sheet'.($lastId+1).'.xml') !== false) {
-								$lastId++;
-						}
-						$id = $lastId + $id;
+					throw new \Exception('Sheet with name "'.$name.'" not found in file '.$this->targetFilename.'. Appending is not yet implemented.');
+					/*
+					// find a unused id in the worksheets
+					$id = 1;
+					while($this->getXLSX()->statName('xl/worksheets/sheet'.($id++).'.xml') !== false) {}
+					*/
 				}
+
 				$old = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
 				if($old === false) {
-						throw new \Exception('Appending new sheets is not yet implemented: ' . $id .', '. $this->srcFilename.', '.$this->targetFilename);
+						throw new \Exception('Appending new sheets is not yet implemented: SheetId:' . $id .', SourceFile:'. $this->srcFilename.', TargetFile:'.$this->targetFilename);
 				} else {
 						$document = new \DOMDocument();
 						$document->loadXML($old);
@@ -367,10 +373,18 @@ class ExcelWorkbook implements \Countable
 		public function refreshTableRange($tableName, $numRows)
 		{
 				$id = $this->getTableIdByName($tableName);
+				if (is_null($id)) {
+					throw new \Exception('table "' . $tableName . '" not found');
+				}
+
 				$document = new \DOMDocument();
 				$document->loadXML($this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml'));
 
 				$table = $document->getElementsByTagName('table')->item(0);
+				if (is_null($table)) {
+					throw new \Exception('could not read "table" from document; '.$document);
+				}
+
 				$ref = $table->getAttribute('ref');
 
 				$nref = preg_replace('/^(\w+\:[A-Z]+)(\d+)$/', '${1}' . $numRows, $ref);
@@ -440,7 +454,7 @@ class ExcelWorkbook implements \Countable
 				}
 				$isOpen = $this->xlsx->open($this->targetFilename);
 				if($isOpen !== true) {
-						throw new \Exception('File not valid: '.$this->targetFilename);
+						throw new \Exception('Could not open file: '.$this->targetFilename.' [ZipArchive error code: '.$isOpen.']');
 				}
 				return $this;
 		}
@@ -466,7 +480,11 @@ class ExcelWorkbook implements \Countable
 		public function getWorkbook() {
 				if(is_null($this->workbook)) {
 						$this->workbook = new \DOMDocument();
-						$this->workbook->loadXML($this->getXLSX()->getFromName('xl/workbook.xml'));
+						$workbookFile = $this->getXLSX()->getFromName('xl/workbook.xml');
+						if ($workbookFile === false) {
+							throw new \Exception('Could not find xl/workbook.xml in "'.$this->targetFilename.'"');
+						}
+						$this->workbook->loadXML($workbookFile);
 				}
 				return $this->workbook;
 		}
