@@ -296,7 +296,7 @@ class ExcelWorkbook implements \Countable
 						$numFmt->setAttribute('formatCode', 'DD/MM/YYYY\ HH:MM:SS');
 
 						$numFmts->appendChild($numFmt);
-						$numFmts->setAttribute('count', $numFmts->getAttribute('count')+1);
+						$numFmts->setAttribute('count', (int)$numFmts->getAttribute('count')+1);
 				}
 
 				$cellXfs = $this->getStyles()->getElementsByTagName('cellXfs')->item(0);
