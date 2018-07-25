@@ -18,7 +18,7 @@ class ExcelDataTablesServiceProvider extends ServiceProvider {
 		 */
 		public function register()
 		{
-				$this->app['exceldatatables'] = $this->app->share(function($app) {
+				$this->app->singleton('exceldatatables', function () {
 						return new ExcelDataTable();
 				});
 		}
