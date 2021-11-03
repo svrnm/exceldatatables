@@ -210,7 +210,7 @@ class ExcelDataTable
 		 *
 		 * @param string name
 		 * @param string label
-		 * @return this
+		 * @return $this
 		 */
 		protected function addHeader($name, $label) {
 				$this->headerNames[] = $name;
@@ -224,7 +224,7 @@ class ExcelDataTable
 		 *
 		 * @param string name
 		 * @param string label
-		 * @return this
+		 * @return $this
 		 */
 		public function setLabel($name, $label) {
 				$this->headerLabels[$this->headerNameToHeaderNumber($name)] = $label;
@@ -234,7 +234,7 @@ class ExcelDataTable
 		/**
 		 * Show the header row during export
 		 *
-		 * @return this
+		 * @return $this
 		 */
 		public function showHeaders() {
 				$this->headersVisible = true;
@@ -244,7 +244,7 @@ class ExcelDataTable
 		/**
 		 * Do not show the header row during export
 		 *
-		 * @return this
+		 * @return $this
 		 */
 		public function hideHeaders() {
 				$this->headersVisible = false;
@@ -266,7 +266,7 @@ class ExcelDataTable
 		 * are used as labels for the columns, if the header is printed (see: showHeader()/hideHeader())
 		 *
 		 * @param array|object $header
-		 * @return this
+		 * @return $this
 		 */
 		public function setHeaders($header) {
 				foreach((array)$header as $name => $label) {
@@ -297,7 +297,7 @@ class ExcelDataTable
 		 *
 		 * @param int|string columnKey
 		 * @param string type
-		 * @return this
+		 * @return $this
 		 */
 		public function setColumnType($columnKey, $type) {
 				throw new \Exception('"setColumnType" is not yet implemented');
