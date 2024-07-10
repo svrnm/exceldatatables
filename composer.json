@@ -1,25 +1,33 @@
 {
-    "name": "svrnm/exceldatatables",
-    "description": "Replace a worksheet within an Excel workbook (.xlsx) without changing any other properties of the file",
-	"keywords": ["excel","php","datatables","worksheet","workbook","xls","spreadsheet"],
-    "license": "Apache-2.0",
-    "authors": [
-        {
-            "name": "Severin Neumann",
-            "email": "severin.neumann@altmuehlnet.de"
-        }
-    ],
-    "require": {
-        "php": ">=5.3.0"
-    },
-	"require-dev": {
-		"phpspec/phpspec": "~2.0",
-		"mikey179/vfsstream": "1.3.*@dev"
-	},
-    "autoload": {
-        "psr-0": {
-            "Svrnm\\ExcelDataTables": "src/"
-        }
-    },
-    "minimum-stability": "dev"
+  "name": "svrnm/exceldatatables",
+  "description": "Replace a worksheet within an Excel workbook (.xlsx) without changing any other properties of the file",
+  "keywords": [
+    "excel",
+    "php",
+    "datatables",
+    "worksheet",
+    "workbook",
+    "xls",
+    "spreadsheet"
+  ],
+  "license": "Apache-2.0",
+  "authors": [
+    {
+      "name": "Severin Neumann",
+      "email": "severin.neumann@altmuehlnet.de"
+    }
+  ],
+  "require": {
+    "php": ">=7.0.0"
+  },
+  "require-dev": {
+    "phpspec/phpspec": "~7.5",
+    "mikey179/vfsstream": "~1.6"
+  },
+  "autoload": {
+    "psr-0": {
+      "Svrnm\\ExcelDataTables": "src/"
+    }
+  },
+  "minimum-stability": "dev"
 }
