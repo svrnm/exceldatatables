@@ -22,4 +22,4 @@
 			array("Date" => new \DateTime('2014-01-05 17:00:00'), "Value 1" => 4, "Value 2" => -3),
 	);
 	$dataTable->showHeaders()->addRows($data)->attachToFile($in, $out, false);
-?>
+
