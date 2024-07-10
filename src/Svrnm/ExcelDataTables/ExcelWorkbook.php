@@ -144,7 +144,7 @@ class ExcelWorkbook implements \Countable
 		 *
 		 * @return int
 		 */
-		public function count(): int {
+		public function count() {
 				$sheets = $this->getWorkbook()->getElementsByTagName('sheet');
 				return $sheets->length;
 
