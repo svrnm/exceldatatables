@@ -19,7 +19,7 @@ jobs:
 
     steps:
     - name: Common Setup
-      uses: ./.github/workflows/common.yml
+      uses: ./.github/workflows/common-setup.yml
       with:
         php-version: ${{ matrix.php-version }}
         cache-key-suffix: ${{ matrix.php-version }}
