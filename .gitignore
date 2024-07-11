@@ -1,3 +1,4 @@
+examples/test.xlsx
 /vendor
 composer.lock
 *.swp

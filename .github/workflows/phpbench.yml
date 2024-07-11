@@ -1,4 +1,4 @@
-name: Run PhpSpec
+name: Run PhpBench
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  phpspec:
+  phpbench:
     runs-on: ubuntu-22.04
 
     strategy:
@@ -24,5 +24,5 @@ jobs:
         php-version: ${{ matrix.php-version }}
         cache-key-suffix: ${{ matrix.php-version }}
 
-    - name: Run PhpSpec
-      run: vendor/bin/phpspec run
+    - name: Run PhpBench
+      run: vendor/bin/phpbench run
