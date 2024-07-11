@@ -197,7 +197,6 @@ class ExcelWorkbook implements \Countable
 		{
 				$sheets = $this->getWorkbook()->getElementsByTagName('sheet');
 				foreach ($sheets as $index => $sheet) {
-						var_dump($sheet->getAttribute('name'));
 						if ($sheet->getAttribute('name') === $name) {
 								return $index + 1;
 						}
