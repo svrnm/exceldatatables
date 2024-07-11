@@ -22,7 +22,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Common Setup
-      uses: ./.github/workflows/common-setup.yml
+      uses: svrnm/exceldatatables/.github/workflows/common-setup.yml
       with:
         php-version: ${{ matrix.php-version }}
         cache-key-suffix: ${{ matrix.php-version }}
