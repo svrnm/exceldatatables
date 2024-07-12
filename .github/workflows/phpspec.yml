@@ -21,11 +21,24 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Common Setup
-      uses: svrnm/exceldatatables/.github/workflows/common-setup.yml
+    - name: Set up PHP
+      uses: shivammathur/setup-php@v2
       with:
         php-version: ${{ matrix.php-version }}
-        cache-key-suffix: ${{ matrix.php-version }}
+        ini-values: |
+          memory_limit=512M
+        coverage: none
+
+    - name: Get Composer Cache
+      id: composer-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.composer/cache
+        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}-${{ matrix.php-version }}
+        restore-keys: ${{ runner.os }}-composer-${{ matrix.php-version }}
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress --no-suggest
 
     - name: Run PhpSpec
       run: vendor/bin/phpspec run
