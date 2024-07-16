@@ -28,7 +28,7 @@ Use composer to add this repository to your dependencies:
 ```
 
 If you use the [Laravel framework](https://laravel.io/) you can additionally add
-the `ServiceProvider` to your `app/config.php`:
+the `ServiceProvider` to your `config/app.php`:
 
 ```PHP
 ...
