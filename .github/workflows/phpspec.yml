@@ -15,30 +15,32 @@ jobs:
 
     strategy:
       matrix:
-        php-version: ['7.0', '7.4', '8.0', '8.3']
+        php-version: ['8.1', '8.3']
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: ${{ matrix.php-version }}
-        ini-values: |
-          memory_limit=512M
-        coverage: none
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          ini-values: |
+            memory_limit=512M
+          coverage: none
 
-    - name: Get Composer Cache
-      id: composer-cache
-      uses: actions/cache@v4
-      with:
-        path: ~/.composer/cache
-        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}-${{ matrix.php-version }}
-        restore-keys: ${{ runner.os }}-composer-${{ matrix.php-version }}
+      - name: Get Composer Cache
+        id: composer-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key:
+            ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}-${{
+            matrix.php-version }}
+          restore-keys: ${{ runner.os }}-composer-${{ matrix.php-version }}
 
-    - name: Install dependencies
-      run: composer install --prefer-dist --no-progress --no-suggest
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-suggest
 
-    - name: Run PhpSpec
-      run: vendor/bin/phpspec run
+      - name: Run PhpSpec
+        run: vendor/bin/phpspec run
