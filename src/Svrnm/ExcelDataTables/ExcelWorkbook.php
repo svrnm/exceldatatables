@@ -2,6 +2,9 @@
 
 namespace Svrnm\ExcelDataTables;
 
+use OpenTelemetry\API\Trace\TracerInterface;
+use OpenTelemetry\API\Trace\SpanInterface;
+
 /**
  * This class is a simple representation of a excel workbook. It expects
  * a xlsx formatted spreadsheet as paramater and overwrites(!) existing
@@ -12,6 +15,13 @@ namespace Svrnm\ExcelDataTables;
  */
 class ExcelWorkbook implements \Countable
 {
+		/**
+		 * OpenTelemetry tracer instance
+		 *
+		 * @var TracerInterface
+		 */
+		private $tracer;
+
 		/**
 		 * The source filename
 		 *
@@ -78,8 +88,38 @@ class ExcelWorkbook implements \Countable
 		 * @param string $filename
 		 */
 		public function __construct($filename) {
-				$this->srcFilename = $filename;
-				$this->targetFilename = $filename;
+				$tracerProvider = $GLOBALS['_opentelemetry_tracer_provider'] ?? null;
+				if ($tracerProvider) {
+					$this->tracer = $tracerProvider->getTracer(
+						'exceldatatables',
+						'1.0.0',
+						'https://github.com/svrnm/exceldatatables'
+					);
+				}
+
+				$span = null;
+				if ($this->tracer) {
+					$span = $this->tracer->spanBuilder('ExcelWorkbook.construct')
+						->setAttribute('source.file', basename($filename))
+						->startSpan();
+				}
+				
+				try {
+					$this->srcFilename = $filename;
+					$this->targetFilename = $filename;
+					
+					if ($span) {
+						$span->setAttribute('file.exists', file_exists($filename));
+						if (file_exists($filename)) {
+							$span->setAttribute('file.size', filesize($filename));
+						}
+					}
+				} catch (\Exception $e) {
+					if ($span) $span->recordException($e);
+					throw $e;
+				} finally {
+					if ($span) $span->end();
+				}
 		}
 
 		public function __destruct() {
@@ -332,35 +372,55 @@ class ExcelWorkbook implements \Countable
 		 * @param string $name
 		 */
 		public function addWorksheet(ExcelWorksheet $worksheet, $id = null, $name = null) {
-				$name = !is_null($name) ? $name : $this->sheetName;
-				if ($id === null) $id = $this->getSheetIdByName($name);
+				$span = $this->tracer->spanBuilder('ExcelWorkbook.addWorksheet')
+					->setAttribute('sheet.name', $name ?: $this->sheetName)
+					->setAttribute('sheet.id', $id)
+					->setAttribute('auto.save', $this->isAutoSaveEnabled())
+					->startSpan();
+				
+				try {
+					$name = !is_null($name) ? $name : $this->sheetName;
+					if ($id === null) $id = $this->getSheetIdByName($name);
 
-				if(is_null($id) || $id <= 0) {
-					throw new \Exception('Sheet with name "'.$name.'" not found in file '.$this->srcFilename.'. Appending is not yet implemented.');
-					/*
-					// find a unused id in the worksheets
-					$id = 1;
-					while($this->getXLSX()->statName('xl/worksheets/sheet'.($id++).'.xml') !== false) {}
-					*/
-				}
+					$span->setAttribute('resolved.sheet.id', $id);
 
-				$old = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
-				if($old === false) {
-						throw new \Exception('Appending new sheets is not yet implemented: SheetId:' . $id .', SourceFile:'. $this->srcFilename.', TargetFile:'.$this->targetFilename);
-				} else {
-						$document = new \DOMDocument();
-						$document->loadXML($old);
-						$oldSheetData = $document->getElementsByTagName('sheetData')->item(0);
-						$worksheet->setDateTimeFormatId($this->dateTimeFormatId());
-						$newSheetData = $document->importNode( $worksheet->getDocument()->getElementsByTagName('sheetData')->item(0), true );
-						$oldSheetData->parentNode->replaceChild($newSheetData, $oldSheetData);
-						$xml = $document->saveXML();
-						$this->getXLSX()->addFromString('xl/worksheets/sheet'.$id.'.xml', $xml);
+					if(is_null($id) || $id <= 0) {
+						throw new \Exception('Sheet with name "'.$name.'" not found in file '.$this->srcFilename.'. Appending is not yet implemented.');
+						/*
+						// find a unused id in the worksheets
+						$id = 1;
+						while($this->getXLSX()->statName('xl/worksheets/sheet'.($id++).'.xml') !== false) {}
+						*/
+					}
+
+					$old = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
+					if($old === false) {
+							throw new \Exception('Appending new sheets is not yet implemented: SheetId:' . $id .', SourceFile:'. $this->srcFilename.', TargetFile:'.$this->targetFilename);
+					} else {
+							$document = new \DOMDocument();
+							$document->loadXML($old);
+							$oldSheetData = $document->getElementsByTagName('sheetData')->item(0);
+							$worksheet->setDateTimeFormatId($this->dateTimeFormatId());
+							$newSheetData = $document->importNode( $worksheet->getDocument()->getElementsByTagName('sheetData')->item(0), true );
+							$oldSheetData->parentNode->replaceChild($newSheetData, $oldSheetData);
+							$xml = $document->saveXML();
+							$this->getXLSX()->addFromString('xl/worksheets/sheet'.$id.'.xml', $xml);
+							
+							$span->setAttribute('worksheet.xml.size', strlen($xml));
+					}
+					if($this->isAutoSaveEnabled()) {
+							$this->save();
+					}
+					
+					$span->setAttribute('operation.success', true);
+					return $this;
+				} catch (\Exception $e) {
+					$span->recordException($e);
+					$span->setAttribute('operation.success', false);
+					throw $e;
+				} finally {
+					$span->end();
 				}
-				if($this->isAutoSaveEnabled()) {
-						$this->save();
-				}
-				return $this;
 		}
 
 		/**
@@ -444,19 +504,37 @@ class ExcelWorkbook implements \Countable
 		 * @return $this
 		 */
 		protected function openXLSX() {
-				$this->xlsx = new \ZipArchive;
-				if(!file_exists($this->srcFilename) && is_readable($this->srcFilename)) {
-						throw new \Exception('File does not exists: '.$this->srcFilename);
+				$span = $this->tracer->spanBuilder('ExcelWorkbook.openXLSX')
+					->setAttribute('source.file', basename($this->srcFilename))
+					->setAttribute('target.file', basename($this->targetFilename))
+					->startSpan();
+				
+				try {
+					$this->xlsx = new \ZipArchive;
+					if(!file_exists($this->srcFilename) && is_readable($this->srcFilename)) {
+							throw new \Exception('File does not exists: '.$this->srcFilename);
+					}
+					
+					$span->setAttribute('needs.copy', $this->srcFilename !== $this->targetFilename);
+					
+					if($this->srcFilename !== $this->targetFilename) {
+							file_put_contents($this->targetFilename, file_get_contents($this->srcFilename));
+							$this->srcFilename = $this->targetFilename;
+					}
+					
+					$isOpen = $this->xlsx->open($this->targetFilename);
+					if($isOpen !== true) {
+							throw new \Exception('Could not open file: '.$this->targetFilename.' [ZipArchive error code: '.$isOpen.']');
+					}
+					
+					$span->setAttribute('zip.entries', $this->xlsx->numFiles);
+					return $this;
+				} catch (\Exception $e) {
+					$span->recordException($e);
+					throw $e;
+				} finally {
+					$span->end();
 				}
-				if($this->srcFilename !== $this->targetFilename) {
-						file_put_contents($this->targetFilename, file_get_contents($this->srcFilename));
-						$this->srcFilename = $this->targetFilename;
-				}
-				$isOpen = $this->xlsx->open($this->targetFilename);
-				if($isOpen !== true) {
-						throw new \Exception('Could not open file: '.$this->targetFilename.' [ZipArchive error code: '.$isOpen.']');
-				}
-				return $this;
 		}
 
 		/**
@@ -465,10 +543,26 @@ class ExcelWorkbook implements \Countable
 		 * @return $this
 		 */
 		public function save() {
-				$this->getXLSX()->close();
-				$this->srcFilename = $this->targetFilename;
-				$this->openXLSX();
-				return $this;
+				$span = $this->tracer->spanBuilder('ExcelWorkbook.save')
+					->setAttribute('target.file', basename($this->targetFilename))
+					->startSpan();
+				
+				try {
+					$this->getXLSX()->close();
+					$this->srcFilename = $this->targetFilename;
+					$this->openXLSX();
+					
+					if (file_exists($this->targetFilename)) {
+						$span->setAttribute('saved.file.size', filesize($this->targetFilename));
+					}
+					
+					return $this;
+				} catch (\Exception $e) {
+					$span->recordException($e);
+					throw $e;
+				} finally {
+					$span->end();
+				}
 		}
 
 

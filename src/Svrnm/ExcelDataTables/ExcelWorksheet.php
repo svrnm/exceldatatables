@@ -2,6 +2,9 @@
 
 namespace Svrnm\ExcelDataTables;
 
+use OpenTelemetry\API\Trace\TracerInterface;
+use OpenTelemetry\API\Trace\SpanInterface;
+
 /**
  * An instance of this class represents a simple(!) ExcelWorkseeht in the spreadsheetml format.
  * The most important function ist the addRow() function which takes an array as parameter and
@@ -13,6 +16,13 @@ namespace Svrnm\ExcelDataTables;
  */
 class ExcelWorksheet
 {
+		/**
+		 * OpenTelemetry tracer instance
+		 *
+		 * @var TracerInterface
+		 */
+		private $tracer;
+
 		/**
 		 * This namespaces are used to setup the XML document.
 		 *
@@ -80,6 +90,20 @@ class ExcelWorksheet
 				'datetime' => 2,
 				'formula' => 3
 		);
+
+		/**
+		 * Constructor to initialize the OpenTelemetry tracer
+		 */
+		public function __construct() {
+			$tracerProvider = $GLOBALS['_opentelemetry_tracer_provider'] ?? null;
+			if ($tracerProvider) {
+				$this->tracer = $tracerProvider->getTracer(
+					'exceldatatables',
+					'1.0.0',
+					'https://github.com/svrnm/exceldatatables'
+				);
+			}
+		}
 
 		/**
 		 * Setup a default document: XML head, Worksheet element, SheetData element.
@@ -158,8 +182,22 @@ class ExcelWorksheet
 		 * @return string
 		 */
 		public function toXML() {
-				$document = $this->getDocument();
-				return $document->saveXML();
+				$span = $this->tracer->spanBuilder('ExcelWorksheet.toXML')
+					->setAttribute('rows.count', count($this->rows))
+					->startSpan();
+				
+				try {
+					$document = $this->getDocument();
+					$result = $document->saveXML();
+					
+					$span->setAttribute('xml.size', strlen($result));
+					return $result;
+				} catch (\Exception $e) {
+					$span->recordException($e);
+					throw $e;
+				} finally {
+					$span->end();
+				}
 		}
 
 		/**
@@ -413,18 +451,35 @@ class ExcelWorksheet
 		}
 
 		public function addRows($array, $calculatedColumns = null){
-				foreach($array as $key => $row) {
-						if(isset($calculatedColumns)){
-								foreach ($calculatedColumns as $calculatedColumn) {
-										if($key == 0){
-												array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['header']);
-										} else {
-												array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['content']);
-										}
-								}
-						}
-						$this->addRow($row);
+				$span = null;
+				if ($this->tracer) {
+					$span = $this->tracer->spanBuilder('ExcelWorksheet.addRows')
+						->setAttribute('rows.count', count($array))
+						->setAttribute('has.calculated.columns', !is_null($calculatedColumns))
+						->startSpan();
 				}
-				return $this;
+				
+				try {
+					foreach($array as $key => $row) {
+							if(isset($calculatedColumns)){
+									foreach ($calculatedColumns as $calculatedColumn) {
+											if($key == 0){
+													array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['header']);
+											} else {
+													array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['content']);
+											}
+									}
+							}
+							$this->addRow($row);
+					}
+					
+					if ($span) $span->setAttribute('total.rows.processed', count($array));
+					return $this;
+				} catch (\Exception $e) {
+					if ($span) $span->recordException($e);
+					throw $e;
+				} finally {
+					if ($span) $span->end();
+				}
 		}
 }

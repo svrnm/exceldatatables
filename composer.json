@@ -18,10 +18,12 @@
     }
   ],
   "require": {
-    "php": ">=7.0.0"
+    "php": ">=7.0.0",
+    "open-telemetry/sdk": "2.x-dev",
+    "open-telemetry/api": "^1.0"
   },
   "require-dev": {
-    "phpspec/phpspec": "~7.5",
+    "phpspec/phpspec": "^7.5 || ^8.0",
     "mikey179/vfsstream": "~1.6",
     "phpbench/phpbench": "^1.3"
   },

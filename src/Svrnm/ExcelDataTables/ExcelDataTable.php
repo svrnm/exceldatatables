@@ -2,6 +2,9 @@
 
 namespace Svrnm\ExcelDataTables;
 
+use OpenTelemetry\API\Trace\TracerInterface;
+use OpenTelemetry\API\Trace\SpanInterface;
+
 /**
  * The class ExcelDataTable converts given rows (e.g. arrays, objects) into a SpreadsheetML
  * compatible representation which can be attachted to a Exel file (.xlsx) file.
@@ -17,6 +20,13 @@ namespace Svrnm\ExcelDataTables;
  */
 class ExcelDataTable
 {
+
+		/**
+		 * OpenTelemetry tracer instance
+		 *
+		 * @var TracerInterface
+		 */
+		private $tracer;
 
 		/**
 		 * The internal representation of the data table
@@ -108,7 +118,31 @@ class ExcelDataTable
 		 *
 		 */
 		public function __construct() {
+			$tracerProvider = $GLOBALS['_opentelemetry_tracer_provider'] ?? null;
+			if ($tracerProvider) {
+				$this->tracer = $tracerProvider->getTracer(
+					'exceldatatables',
+					'1.0.0',
+					'https://github.com/svrnm/exceldatatables'
+				);
+			}
+		}
 
+		/**
+		 * Helper method to create a span if tracer is available
+		 *
+		 * @param string $name
+		 * @param array $attributes
+		 * @return SpanInterface|null
+		 */
+		private function createSpan($name, $attributes = []) {
+			if (!$this->tracer) return null;
+			
+			$spanBuilder = $this->tracer->spanBuilder($name);
+			foreach ($attributes as $key => $value) {
+				$spanBuilder->setAttribute($key, $value);
+			}
+			return $spanBuilder->startSpan();
 		}
 
 		/**
@@ -119,10 +153,19 @@ class ExcelDataTable
 		 * @return $this
 		 */
 		public function addRows($rows) {
-				foreach($rows as $row) {
-						$this->addRow($row);
+				$span = $this->createSpan('ExcelDataTable.addRows', ['rows.count' => count($rows)]);
+				
+				try {
+					foreach($rows as $row) {
+							$this->addRow($row);
+					}
+					return $this;
+				} catch (\Exception $e) {
+					if ($span) $span->recordException($e);
+					throw $e;
+				} finally {
+					if ($span) $span->end();
 				}
-				return $this;
 		}
 
 		/**
@@ -137,28 +180,44 @@ class ExcelDataTable
 		 * @return $this
 		 */
 		public function addRow($row) {
-				$result = array();
+				$span = $this->tracer->spanBuilder('ExcelDataTable.addRow')
+					->setAttribute('row.columns', count($row))
+					->setAttribute('headers.defined', $this->headersDefined)
+					->startSpan();
+				
+				try {
+					$result = array();
 
-				if(!$this->headersDefined) {
-						$headers = array();
-						foreach($row as $key => $value) {
-								$headers[$key] = $key;
-						}
-						$this->setHeaders($headers);
+					if(!$this->headersDefined) {
+							$headers = array();
+							foreach($row as $key => $value) {
+									$headers[$key] = $key;
+							}
+							$this->setHeaders($headers);
+							$span->setAttribute('headers.auto_defined', true);
+					}
+
+
+					foreach($row as $name => $value) {
+							$number = $this->headerNameToHeaderNumber($name);
+							if($number !== false) {
+									$result[$number] = $value;
+							} else {
+									$this->failedCells[count($this->data)] = array($name => $value);
+							}
+					}
+					$this->data[] = $result;
+					
+					$span->setAttribute('failed.cells', count($this->failedCells));
+					$span->setAttribute('total.rows', count($this->data));
+
+					return $this;
+				} catch (\Exception $e) {
+					$span->recordException($e);
+					throw $e;
+				} finally {
+					$span->end();
 				}
-
-
-				foreach($row as $name => $value) {
-						$number = $this->headerNameToHeaderNumber($name);
-						if($number !== false) {
-								$result[$number] = $value;
-						} else {
-								$this->failedCells[count($this->data)] = array($name => $value);
-						}
-				}
-				$this->data[] = $result;
-
-				return $this;
 		}
 
 		/**
@@ -326,14 +385,27 @@ class ExcelDataTable
 		 * @return array
 		 */
 		public function toArray() {
-				$arr = array();
-				if($this->areHeadersVisible()) {
-						$arr[] = $this->headerLabels;
+				$span = $this->tracer->spanBuilder('ExcelDataTable.toArray')
+					->setAttribute('data.rows', count($this->data))
+					->setAttribute('headers.visible', $this->areHeadersVisible())
+					->startSpan();
+				
+				try {
+					$arr = array();
+					if($this->areHeadersVisible()) {
+							$arr[] = $this->headerLabels;
+					}
+					foreach($this->data as $row) {
+							$arr[] = $this->fillRow($row);
+					}
+					$span->setAttribute('result.rows', count($arr));
+					return $arr;
+				} catch (\Exception $e) {
+					$span->recordException($e);
+					throw $e;
+				} finally {
+					$span->end();
 				}
-				foreach($this->data as $row) {
-						$arr[] = $this->fillRow($row);
-				}
-				return $arr;
 		}
 
 		/**
@@ -343,17 +415,32 @@ class ExcelDataTable
 		 * @return string
 		 */
 		public function toCsv($separator = ',', $quote = '', $newLine = PHP_EOL) {
-				return implode(
-						$newLine,
-						array_map(
-								function($elem) use($separator, $quote) {
-										$s = $quote.$separator.$quote;
-										return $quote.implode($s, $elem).$quote;
-								},
-										$this->toArray()
-								)
-						);
-
+				$span = $this->tracer->spanBuilder('ExcelDataTable.toCsv')
+					->setAttribute('data.rows', count($this->data))
+					->setAttribute('csv.separator', $separator)
+					->setAttribute('csv.quote', $quote)
+					->startSpan();
+				
+				try {
+					$result = implode(
+							$newLine,
+							array_map(
+									function($elem) use($separator, $quote) {
+											$s = $quote.$separator.$quote;
+											return $quote.implode($s, $elem).$quote;
+									},
+											$this->toArray()
+									)
+							);
+					
+					$span->setAttribute('csv.size', strlen($result));
+					return $result;
+				} catch (\Exception $e) {
+					$span->recordException($e);
+					throw $e;
+				} finally {
+					$span->end();
+				}
 		}
 
 		/**
@@ -362,8 +449,21 @@ class ExcelDataTable
 		 * @return string
 		 */
 		public function toXML() {
-				$worksheet = new ExcelWorksheet();
-				return $worksheet->addRows($this->toArray())->toXML();
+				$span = $this->tracer->spanBuilder('ExcelDataTable.toXML')
+					->setAttribute('data.rows', count($this->data))
+					->startSpan();
+				
+				try {
+					$worksheet = new ExcelWorksheet();
+					$result = $worksheet->addRows($this->toArray())->toXML();
+					$span->setAttribute('xml.size', strlen($result));
+					return $result;
+				} catch (\Exception $e) {
+					$span->recordException($e);
+					throw $e;
+				} finally {
+					$span->end();
+				}
 		}
 
 		/**
@@ -412,31 +512,52 @@ class ExcelDataTable
 		 * @return $this
 		 */
 		public function attachToFile($srcFilename, $targetFilename = null, $forceAutoCalculation = false) {
-				$calculatedColumns = null;
-				if ($this->preserveFormulas){
-						$temp_xlsx = new ExcelWorkbook($srcFilename);
-						$calculatedColumns = $temp_xlsx->getCalculatedColumns($this->preserveFormulas);
-						unset($temp_xlsx);
-				}
+				$span = $this->tracer->spanBuilder('ExcelDataTable.attachToFile')
+					->setAttribute('source.file', basename($srcFilename))
+					->setAttribute('target.file', $targetFilename ? basename($targetFilename) : basename($srcFilename))
+					->setAttribute('sheet.name', $this->sheetName)
+					->setAttribute('sheet.id', $this->sheetId)
+					->setAttribute('data.rows', count($this->data))
+					->setAttribute('auto.calculation', $forceAutoCalculation)
+					->setAttribute('preserve.formulas', !is_null($this->preserveFormulas))
+					->setAttribute('refresh.table.range', !is_null($this->refreshTableRange))
+					->startSpan();
+				
+				try {
+					$calculatedColumns = null;
+					if ($this->preserveFormulas){
+							$temp_xlsx = new ExcelWorkbook($srcFilename);
+							$calculatedColumns = $temp_xlsx->getCalculatedColumns($this->preserveFormulas);
+							unset($temp_xlsx);
+					}
 
-				$xlsx = new ExcelWorkbook($srcFilename);
-				$worksheet = new ExcelWorksheet();
-				if(!is_null($targetFilename)) {
-						$xlsx->setFilename($targetFilename);
-				}
-				$worksheet->addRows($this->toArray(), $calculatedColumns);
-				$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName);
-				if($forceAutoCalculation) {
-					$xlsx->enableAutoCalculation();
-				}
+					$xlsx = new ExcelWorkbook($srcFilename);
+					$worksheet = new ExcelWorksheet();
+					if(!is_null($targetFilename)) {
+							$xlsx->setFilename($targetFilename);
+					}
+					$worksheet->addRows($this->toArray(), $calculatedColumns);
+					$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName);
+					if($forceAutoCalculation) {
+						$xlsx->enableAutoCalculation();
+					}
 
-				if ($this->refreshTableRange) {
-					$xlsx->refreshTableRange($this->refreshTableRange, count($this->data) + 1);
-				}
+					if ($this->refreshTableRange) {
+						$xlsx->refreshTableRange($this->refreshTableRange, count($this->data) + 1);
+					}
 
-				$xlsx->save();
-				unset($xlsx);
-				return $this;
+					$xlsx->save();
+					unset($xlsx);
+					
+					$span->setAttribute('operation.success', true);
+					return $this;
+				} catch (\Exception $e) {
+					$span->recordException($e);
+					$span->setAttribute('operation.success', false);
+					throw $e;
+				} finally {
+					$span->end();
+				}
 		}
 
 		/**
@@ -448,11 +569,27 @@ class ExcelDataTable
 		 * @return string
 		 */
 		public function fillXLSX($srcFilename) {
-				$targetFilename = tempnam(sys_get_temp_dir(), 'exceldatatables-');
-				$this->attachToFile($srcFilename, $targetFilename);
-				$result = file_get_contents($targetFilename);
-				unlink($targetFilename);
-				return $result;
+				$span = $this->tracer->spanBuilder('ExcelDataTable.fillXLSX')
+					->setAttribute('source.file', basename($srcFilename))
+					->setAttribute('data.rows', count($this->data))
+					->startSpan();
+				
+				try {
+					$targetFilename = tempnam(sys_get_temp_dir(), 'exceldatatables-');
+					$span->setAttribute('temp.file', basename($targetFilename));
+					
+					$this->attachToFile($srcFilename, $targetFilename);
+					$result = file_get_contents($targetFilename);
+					unlink($targetFilename);
+					
+					$span->setAttribute('result.size', strlen($result));
+					return $result;
+				} catch (\Exception $e) {
+					$span->recordException($e);
+					throw $e;
+				} finally {
+					$span->end();
+				}
 		}
 
 		/**

@@ -95,6 +95,41 @@ examples demonstrates this case within a Laravel application
 ?>
 ```
 
+## OpenTelemetry Instrumentation
+
+This library includes comprehensive OpenTelemetry instrumentation for observability and tracing. All major operations are automatically traced with detailed attributes.
+
+### Quick Start with Tracing
+
+```php
+<?php
+// Include OpenTelemetry configuration
+require_once 'otel-config.php';
+
+// Use the library as normal - tracing happens automatically
+$dataTable = new Svrnm\ExcelDataTables\ExcelDataTable();
+$dataTable->addRows($data)->attachToFile($source, $target);
+```
+
+### What's Traced
+
+- File operations (reading, writing, ZIP archive handling)
+- Data processing (adding rows, converting formats)
+- Excel-specific operations (worksheet manipulation, formula preservation)
+- Performance metrics (file sizes, processing times, row counts)
+
+### Documentation
+
+For detailed OpenTelemetry setup and configuration, see [OPENTELEMETRY.md](./OPENTELEMETRY.md).
+
+### Example with Tracing
+
+Run the instrumented example to see tracing in action:
+
+```bash
+php examples/instrumented-example.php
+```
+
 ## Contact
 
 For any questions you can contact Severin Neumann
