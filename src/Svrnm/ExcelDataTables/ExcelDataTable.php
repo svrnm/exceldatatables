@@ -2,6 +2,13 @@
 
 namespace Svrnm\ExcelDataTables;
 
+use OpenTelemetry\API\Globals;
+use OpenTelemetry\API\Trace\Span;
+use OpenTelemetry\API\Trace\SpanKind;
+use OpenTelemetry\API\Trace\StatusCode;
+use OpenTelemetry\API\Instrumentation\CachedInstrumentation;
+use OpenTelemetry\SemConv\TraceAttributes;
+
 /**
  * The class ExcelDataTable converts given rows (e.g. arrays, objects) into a SpreadsheetML
  * compatible representation which can be attachted to a Exel file (.xlsx) file.
@@ -17,6 +24,8 @@ namespace Svrnm\ExcelDataTables;
  */
 class ExcelDataTable
 {
+
+		private static ?CachedInstrumentation $instrumentation = null;
 
 		/**
 		 * The internal representation of the data table
@@ -108,7 +117,17 @@ class ExcelDataTable
 		 *
 		 */
 		public function __construct() {
+			self::getInstrumentation();
+		}
 
+		/**
+		 * Get the cached instrumentation instance
+		 */
+		private static function getInstrumentation(): CachedInstrumentation {
+			if (self::$instrumentation === null) {
+				self::$instrumentation = new CachedInstrumentation('svrnm/excel-data-tables', '1.0.0', 'https://opentelemetry.io/schemas/1.24.0');
+			}
+			return self::$instrumentation;
 		}
 
 		/**
@@ -119,10 +138,39 @@ class ExcelDataTable
 		 * @return $this
 		 */
 		public function addRows($rows) {
+			$instrumentation = self::getInstrumentation();
+			$tracer = $instrumentation->tracer();
+			
+			$span = $tracer->spanBuilder('ExcelDataTable.addRows')
+				->setSpanKind(SpanKind::KIND_INTERNAL)
+				->setAttribute('excel.operation', 'add_rows')
+				->setAttribute('excel.rows_count', count($rows))
+				->setAttribute(TraceAttributes::CODE_FUNCTION, 'addRows')
+				->setAttribute(TraceAttributes::CODE_FILEPATH, __FILE__)
+				->startSpan();
+			
+			$scope = $span->activate();
+			
+			try {
 				foreach($rows as $row) {
-						$this->addRow($row);
+					$this->addRow($row);
 				}
+				
+				$span->addEvent('rows.added', [
+					'rows_processed' => count($rows),
+					'total_rows' => count($this->data)
+				]);
+				
+				$span->setStatus(StatusCode::STATUS_OK);
 				return $this;
+			} catch (\Throwable $e) {
+				$span->recordException($e);
+				$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+				throw $e;
+			} finally {
+				$scope->detach();
+				$span->end();
+			}
 		}
 
 		/**
@@ -137,28 +185,59 @@ class ExcelDataTable
 		 * @return $this
 		 */
 		public function addRow($row) {
+			$instrumentation = self::getInstrumentation();
+			$tracer = $instrumentation->tracer();
+			
+			$span = $tracer->spanBuilder('ExcelDataTable.addRow')
+				->setSpanKind(SpanKind::KIND_INTERNAL)
+				->setAttribute('excel.operation', 'add_row')
+				->setAttribute('excel.row_columns', count($row))
+				->setAttribute(TraceAttributes::CODE_FUNCTION, 'addRow')
+				->setAttribute(TraceAttributes::CODE_FILEPATH, __FILE__)
+				->startSpan();
+			
+			$scope = $span->activate();
+			
+			try {
 				$result = array();
 
 				if(!$this->headersDefined) {
-						$headers = array();
-						foreach($row as $key => $value) {
-								$headers[$key] = $key;
-						}
-						$this->setHeaders($headers);
+					$headers = array();
+					foreach($row as $key => $value) {
+						$headers[$key] = $key;
+					}
+					$this->setHeaders($headers);
+					
+					$span->addEvent('headers.defined', [
+						'headers_count' => count($headers)
+					]);
 				}
-
 
 				foreach($row as $name => $value) {
-						$number = $this->headerNameToHeaderNumber($name);
-						if($number !== false) {
-								$result[$number] = $value;
-						} else {
-								$this->failedCells[count($this->data)] = array($name => $value);
-						}
+					$number = $this->headerNameToHeaderNumber($name);
+					if($number !== false) {
+						$result[$number] = $value;
+					} else {
+						$this->failedCells[count($this->data)] = array($name => $value);
+						
+						$span->addEvent('cell.failed', [
+							'column_name' => $name,
+							'row_index' => count($this->data)
+						]);
+					}
 				}
 				$this->data[] = $result;
-
+				
+				$span->setStatus(StatusCode::STATUS_OK);
 				return $this;
+			} catch (\Throwable $e) {
+				$span->recordException($e);
+				$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+				throw $e;
+			} finally {
+				$scope->detach();
+				$span->end();
+			}
 		}
 
 		/**
@@ -319,52 +398,143 @@ class ExcelDataTable
 				return $result;
 		}
 
-		/**
-		 * Exports the data table into an array representation. If the headers are visible
-		 * they are at index 0 of the multidimensional array
-		 *
-		 * @return array
-		 */
-		public function toArray() {
-				$arr = array();
-				if($this->areHeadersVisible()) {
-						$arr[] = $this->headerLabels;
-				}
-				foreach($this->data as $row) {
-						$arr[] = $this->fillRow($row);
-				}
-				return $arr;
+			/**
+	 * Exports the data table into an array representation. If the headers are visible
+	 * they are at index 0 of the multidimensional array
+	 *
+	 * @return array
+	 */
+	public function toArray() {
+		$instrumentation = self::getInstrumentation();
+		$tracer = $instrumentation->tracer();
+		
+		$span = $tracer->spanBuilder('ExcelDataTable.toArray')
+			->setSpanKind(SpanKind::KIND_INTERNAL)
+			->setAttribute('excel.operation', 'convert_to_array')
+			->setAttribute('excel.data_rows', count($this->data))
+			->setAttribute('excel.headers_visible', $this->areHeadersVisible())
+			->setAttribute(TraceAttributes::CODE_FUNCTION, 'toArray')
+			->setAttribute(TraceAttributes::CODE_FILEPATH, __FILE__)
+			->startSpan();
+		
+		$scope = $span->activate();
+		
+		try {
+			$arr = array();
+			if($this->areHeadersVisible()) {
+				$arr[] = $this->headerLabels;
+				$span->addEvent('headers.included');
+			}
+			foreach($this->data as $row) {
+				$arr[] = $this->fillRow($row);
+			}
+			
+			$span->addEvent('conversion.complete', [
+				'output_rows' => count($arr),
+				'columns' => count($this->headerNumbers)
+			]);
+			
+			$span->setStatus(StatusCode::STATUS_OK);
+			return $arr;
+		} catch (\Throwable $e) {
+			$span->recordException($e);
+			$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+			throw $e;
+		} finally {
+			$scope->detach();
+			$span->end();
 		}
+	}
 
-		/**
-		 * Exports the data table into a csv formatted string. If the headers are visible
-		 * they are added as first row
-		 *
-		 * @return string
-		 */
-		public function toCsv($separator = ',', $quote = '', $newLine = PHP_EOL) {
-				return implode(
-						$newLine,
-						array_map(
-								function($elem) use($separator, $quote) {
-										$s = $quote.$separator.$quote;
-										return $quote.implode($s, $elem).$quote;
-								},
-										$this->toArray()
-								)
-						);
-
+			/**
+	 * Exports the data table into a csv formatted string. If the headers are visible
+	 * they are added as first row
+	 *
+	 * @return string
+	 */
+	public function toCsv($separator = ',', $quote = '', $newLine = PHP_EOL) {
+		$instrumentation = self::getInstrumentation();
+		$tracer = $instrumentation->tracer();
+		
+		$span = $tracer->spanBuilder('ExcelDataTable.toCsv')
+			->setSpanKind(SpanKind::KIND_INTERNAL)
+			->setAttribute('excel.operation', 'convert_to_csv')
+			->setAttribute('excel.data_rows', count($this->data))
+			->setAttribute('excel.csv_separator', $separator)
+			->setAttribute('excel.csv_quote', $quote)
+			->setAttribute(TraceAttributes::CODE_FUNCTION, 'toCsv')
+			->setAttribute(TraceAttributes::CODE_FILEPATH, __FILE__)
+			->startSpan();
+		
+		$scope = $span->activate();
+		
+		try {
+			$result = implode(
+				$newLine,
+				array_map(
+					function($elem) use($separator, $quote) {
+						$s = $quote.$separator.$quote;
+						return $quote.implode($s, $elem).$quote;
+					},
+							$this->toArray()
+					)
+				);
+			
+			$span->addEvent('csv.generated', [
+				'output_size' => strlen($result),
+				'line_count' => substr_count($result, $newLine) + 1
+			]);
+			
+			$span->setStatus(StatusCode::STATUS_OK);
+			return $result;
+		} catch (\Throwable $e) {
+			$span->recordException($e);
+			$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+			throw $e;
+		} finally {
+			$scope->detach();
+			$span->end();
 		}
+	}
 
-		/**
-		 * Creates and returns the created worksheet as spreadsheetml
-		 *
-		 * @return string
-		 */
-		public function toXML() {
-				$worksheet = new ExcelWorksheet();
-				return $worksheet->addRows($this->toArray())->toXML();
+			/**
+	 * Creates and returns the created worksheet as spreadsheetml
+	 *
+	 * @return string
+	 */
+	public function toXML() {
+		$instrumentation = self::getInstrumentation();
+		$tracer = $instrumentation->tracer();
+		
+		$span = $tracer->spanBuilder('ExcelDataTable.toXML')
+			->setSpanKind(SpanKind::KIND_INTERNAL)
+			->setAttribute('excel.operation', 'convert_to_xml')
+			->setAttribute('excel.data_rows', count($this->data))
+			->setAttribute(TraceAttributes::CODE_FUNCTION, 'toXML')
+			->setAttribute(TraceAttributes::CODE_FILEPATH, __FILE__)
+			->startSpan();
+		
+		$scope = $span->activate();
+		
+		try {
+			$worksheet = new ExcelWorksheet();
+			$result = $worksheet->addRows($this->toArray())->toXML();
+			
+			$span->addEvent('xml.generated', [
+				'output_size' => strlen($result)
+			]);
+			
+			$span->setStatus(StatusCode::STATUS_OK);
+			return $result;
+		} catch (\Throwable $e) {
+			$span->recordException($e);
+			$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+			throw $e;
+		} finally {
+			$scope->detach();
+			$span->end();
 		}
+	}
 
 		/**
 		 * Return a string representation of the data table.
@@ -400,60 +570,137 @@ class ExcelDataTable
 				return $this;
 		}
 
-		/**
-		 * Attach the data table to an existing xlsx file. The file location is given via the
-		 * first parameter. If a second parameter is given the source file will not be overwritten
-		 * and a new file will be created. The third parameter can be used to force updating the
-		 * auto calculation in the excel workbook.
-		 *
-		 * @param string srcFilename
-		 * @param string|null targetFilename
-		 * @param bool|null forceAutoCalculation
-		 * @return $this
-		 */
-		public function attachToFile($srcFilename, $targetFilename = null, $forceAutoCalculation = false) {
-				$calculatedColumns = null;
-				if ($this->preserveFormulas){
-						$temp_xlsx = new ExcelWorkbook($srcFilename);
-						$calculatedColumns = $temp_xlsx->getCalculatedColumns($this->preserveFormulas);
-						unset($temp_xlsx);
-				}
+			/**
+	 * Attach the data table to an existing xlsx file. The file location is given via the
+	 * first parameter. If a second parameter is given the source file will not be overwritten
+	 * and a new file will be created. The third parameter can be used to force updating the
+	 * auto calculation in the excel workbook.
+	 *
+	 * @param string srcFilename
+	 * @param string|null targetFilename
+	 * @param bool|null forceAutoCalculation
+	 * @return $this
+	 */
+	public function attachToFile($srcFilename, $targetFilename = null, $forceAutoCalculation = false) {
+		$instrumentation = self::getInstrumentation();
+		$tracer = $instrumentation->tracer();
+		
+		$span = $tracer->spanBuilder('ExcelDataTable.attachToFile')
+			->setSpanKind(SpanKind::KIND_INTERNAL)
+			->setAttribute('excel.operation', 'attach_to_file')
+			->setAttribute('excel.source_file', basename($srcFilename))
+			->setAttribute('excel.target_file', $targetFilename ? basename($targetFilename) : null)
+			->setAttribute('excel.data_rows', count($this->data))
+			->setAttribute('excel.auto_calculation', $forceAutoCalculation)
+			->setAttribute('excel.preserve_formulas', $this->preserveFormulas !== null)
+			->setAttribute('excel.refresh_table_range', $this->refreshTableRange !== null)
+			->setAttribute('excel.sheet_name', $this->sheetName)
+			->setAttribute(TraceAttributes::CODE_FUNCTION, 'attachToFile')
+			->setAttribute(TraceAttributes::CODE_FILEPATH, __FILE__)
+			->startSpan();
+		
+		$scope = $span->activate();
+		
+		try {
+			$calculatedColumns = null;
+			if ($this->preserveFormulas){
+				$span->addEvent('formulas.preserve_start');
+				$temp_xlsx = new ExcelWorkbook($srcFilename);
+				$calculatedColumns = $temp_xlsx->getCalculatedColumns($this->preserveFormulas);
+				unset($temp_xlsx);
+				$span->addEvent('formulas.preserve_complete');
+			}
 
-				$xlsx = new ExcelWorkbook($srcFilename);
-				$worksheet = new ExcelWorksheet();
-				if(!is_null($targetFilename)) {
-						$xlsx->setFilename($targetFilename);
-				}
-				$worksheet->addRows($this->toArray(), $calculatedColumns);
-				$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName);
-				if($forceAutoCalculation) {
-					$xlsx->enableAutoCalculation();
-				}
+			$span->addEvent('workbook.create_start');
+			$xlsx = new ExcelWorkbook($srcFilename);
+			$worksheet = new ExcelWorksheet();
+			if(!is_null($targetFilename)) {
+				$xlsx->setFilename($targetFilename);
+			}
+			
+			$span->addEvent('worksheet.add_rows_start');
+			$worksheet->addRows($this->toArray(), $calculatedColumns);
+			$span->addEvent('worksheet.add_rows_complete');
+			
+			$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName);
+			
+			if($forceAutoCalculation) {
+				$span->addEvent('auto_calculation.enabled');
+				$xlsx->enableAutoCalculation();
+			}
 
-				if ($this->refreshTableRange) {
-					$xlsx->refreshTableRange($this->refreshTableRange, count($this->data) + 1);
-				}
+			if ($this->refreshTableRange) {
+				$span->addEvent('table_range.refresh_start');
+				$xlsx->refreshTableRange($this->refreshTableRange, count($this->data) + 1);
+				$span->addEvent('table_range.refresh_complete');
+			}
 
-				$xlsx->save();
-				unset($xlsx);
-				return $this;
+			$span->addEvent('workbook.save_start');
+			$xlsx->save();
+			$span->addEvent('workbook.save_complete');
+			
+			unset($xlsx);
+			
+			$span->setStatus(StatusCode::STATUS_OK);
+			return $this;
+		} catch (\Throwable $e) {
+			$span->recordException($e);
+			$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+			throw $e;
+		} finally {
+			$scope->detach();
+			$span->end();
 		}
+	}
 
-		/**
-		 * This functions takes an XLSX-file and an multidimensional and returns a string representation of the
-		 * XLSX file including the data table.
-		 * This function is especially useful if the file should be provided as download for a http request.
-		 *
-		 * @param string srcFilename
-		 * @return string
-		 */
-		public function fillXLSX($srcFilename) {
-				$targetFilename = tempnam(sys_get_temp_dir(), 'exceldatatables-');
-				$this->attachToFile($srcFilename, $targetFilename);
-				$result = file_get_contents($targetFilename);
-				unlink($targetFilename);
-				return $result;
+			/**
+	 * This functions takes an XLSX-file and an multidimensional and returns a string representation of the
+	 * XLSX file including the data table.
+	 * This function is especially useful if the file should be provided as download for a http request.
+	 *
+	 * @param string srcFilename
+	 * @return string
+	 */
+	public function fillXLSX($srcFilename) {
+		$instrumentation = self::getInstrumentation();
+		$tracer = $instrumentation->tracer();
+		
+		$span = $tracer->spanBuilder('ExcelDataTable.fillXLSX')
+			->setSpanKind(SpanKind::KIND_INTERNAL)
+			->setAttribute('excel.operation', 'fill_xlsx')
+			->setAttribute('excel.source_file', basename($srcFilename))
+			->setAttribute('excel.data_rows', count($this->data))
+			->setAttribute(TraceAttributes::CODE_FUNCTION, 'fillXLSX')
+			->setAttribute(TraceAttributes::CODE_FILEPATH, __FILE__)
+			->startSpan();
+		
+		$scope = $span->activate();
+		
+		try {
+			$targetFilename = tempnam(sys_get_temp_dir(), 'exceldatatables-');
+			$span->addEvent('temp_file.created', ['temp_file' => basename($targetFilename)]);
+			
+			$this->attachToFile($srcFilename, $targetFilename);
+			
+			$span->addEvent('file.read_start');
+			$result = file_get_contents($targetFilename);
+			$span->addEvent('file.read_complete', ['file_size' => strlen($result)]);
+			
+			$span->addEvent('temp_file.cleanup_start');
+			unlink($targetFilename);
+			$span->addEvent('temp_file.cleanup_complete');
+			
+			$span->setStatus(StatusCode::STATUS_OK);
+			return $result;
+		} catch (\Throwable $e) {
+			$span->recordException($e);
+			$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+			throw $e;
+		} finally {
+			$scope->detach();
+			$span->end();
 		}
+	}
 
 		/**
 		 * This function regenerates the range of the dynamic table to match

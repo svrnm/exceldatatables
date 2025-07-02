@@ -2,6 +2,12 @@
 
 namespace Svrnm\ExcelDataTables;
 
+use OpenTelemetry\API\Instrumentation\CachedInstrumentation;
+use OpenTelemetry\API\Trace\Propagation\TraceContextPropagator;
+use OpenTelemetry\API\Trace\SpanKind;
+use OpenTelemetry\API\Trace\StatusCode;
+use OpenTelemetry\SemConv\TraceAttributes;
+
 /**
  * An instance of this class represents a simple(!) ExcelWorkseeht in the spreadsheetml format.
  * The most important function ist the addRow() function which takes an array as parameter and
@@ -13,6 +19,11 @@ namespace Svrnm\ExcelDataTables;
  */
 class ExcelWorksheet
 {
+		/**
+		 * @var CachedInstrumentation
+		 */
+		private static $instrumentation;
+
 		/**
 		 * This namespaces are used to setup the XML document.
 		 *
@@ -87,8 +98,30 @@ class ExcelWorksheet
 		 * @return $this
 		 */
 		public function setupDefaultDocument() {
-				$this->getSheetData();
-				return $this;
+				self::$instrumentation ??= new CachedInstrumentation('svrnm-exceldatatables');
+				
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorksheet.setupDefaultDocument')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'worksheet.setup_default_document')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'setupDefaultDocument')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorksheet')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					$this->getSheetData();
+					$span->addEvent('worksheet.default_document_setup');
+					return $this;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
+				}
 		}
 
 		/**
@@ -97,12 +130,31 @@ class ExcelWorksheet
 		 * @return $this
 		 */
 		public function setDateTimeFormatId($id) {
-				$this->dirty = true;
-				$this->dateTimeFormatId = $id;
-				/*foreach($this->dateTimeColumns as $column) {
-					$column->setAttribute('s', $id);
-				}*/
-				return $this;
+				self::$instrumentation ??= new CachedInstrumentation('svrnm-exceldatatables');
+				
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorksheet.setDateTimeFormatId')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'worksheet.set_datetime_format')
+						->setAttribute('excel.format_id', $id)
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'setDateTimeFormatId')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorksheet')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					$this->dirty = true;
+					$this->dateTimeFormatId = $id;
+					$span->addEvent('worksheet.datetime_format_updated', ['excel.new_format_id' => $id]);
+					/*foreach($this->dateTimeColumns as $column) {
+						$column->setAttribute('s', $id);
+					}*/
+					return $this;
+				} finally {
+					$span->end();
+					$scope->detach();
+				}
 		}
 
 		/**
@@ -158,8 +210,36 @@ class ExcelWorksheet
 		 * @return string
 		 */
 		public function toXML() {
-				$document = $this->getDocument();
-				return $document->saveXML();
+				self::$instrumentation ??= new CachedInstrumentation('svrnm-exceldatatables');
+				
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorksheet.toXML')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'worksheet.to_xml')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'toXML')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorksheet')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					$document = $this->getDocument();
+					$xml = $document->saveXML();
+					
+					$span->addEvent('worksheet.xml_generated', [
+						'excel.xml_size' => strlen($xml),
+						'excel.rows_count' => count($this->rows)
+					]);
+					
+					return $xml;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
+				}
 		}
 
 		/**
@@ -289,26 +369,63 @@ class ExcelWorksheet
 		}
 
 		protected function updateDocument() {
-				if($this->dirty) {
-						$this->dirty = false;
-						$self = $this;
-						$this->rowCounter = 1;
-						$fragment = $this->document->createDocumentFragment();
-						$xml = implode('', array_map(function($row) use ($self) {
-								return '<row r="'.($self->incrementRowCounter()).'">'.implode('', array_map(function($column) use ($self) {
-										return $self->toXMLColumn($column);
-								}, $row)).'</row>';
-						}, $this->rows));
-						if(!$fragment->appendXML($xml)) {
-								throw new \Exception('Parsing XML failed');
-						}
-						$this->getSheetData()->parentNode->replaceChild(
-								$s = $this->getSheetData()->cloneNode( false ),
-								$this->getSheetData()
-						);
-						$this->sheetData = $s;
-						$this->getSheetData()->appendChild($fragment);
+				self::$instrumentation ??= new CachedInstrumentation('svrnm-exceldatatables');
+				
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorksheet.updateDocument')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'worksheet.update_document')
+						->setAttribute('excel.is_dirty', $this->dirty)
+						->setAttribute('excel.rows_count', count($this->rows))
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'updateDocument')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorksheet')
+						->startSpan();
 
+				$scope = $span->activate();
+				
+				try {
+					if($this->dirty) {
+							$span->addEvent('worksheet.document_update_start');
+							
+							$this->dirty = false;
+							$self = $this;
+							$this->rowCounter = 1;
+							$fragment = $this->document->createDocumentFragment();
+							
+							$xml = implode('', array_map(function($row) use ($self) {
+									return '<row r="'.($self->incrementRowCounter()).'">'.implode('', array_map(function($column) use ($self) {
+											return $self->toXMLColumn($column);
+									}, $row)).'</row>';
+							}, $this->rows));
+							
+							$span->addEvent('worksheet.xml_fragment_generated', [
+								'excel.xml_size' => strlen($xml),
+								'excel.rows_processed' => count($this->rows)
+							]);
+							
+							if(!$fragment->appendXML($xml)) {
+									$span->addEvent('worksheet.xml_parsing_failed');
+									throw new \Exception('Parsing XML failed');
+							}
+							
+							$this->getSheetData()->parentNode->replaceChild(
+									$s = $this->getSheetData()->cloneNode( false ),
+									$this->getSheetData()
+							);
+							$this->sheetData = $s;
+							$this->getSheetData()->appendChild($fragment);
+							
+							$span->addEvent('worksheet.document_updated');
+					} else {
+							$span->addEvent('worksheet.document_already_clean');
+					}
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
 		}
 
@@ -325,12 +442,55 @@ class ExcelWorksheet
 		 * @return $this
 		 */
 		public function addRow($columns = array()) {
-				$this->dirty = true;
-				$row = $this->getNewRow();
-				foreach($columns as $column) {
-						$this->addColumnToRow($row, $column);
+				self::$instrumentation ??= new CachedInstrumentation('svrnm-exceldatatables');
+				
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorksheet.addRow')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'worksheet.add_row')
+						->setAttribute('excel.columns_count', count($columns))
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'addRow')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorksheet')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					$this->dirty = true;
+					$row = $this->getNewRow();
+					$columnTypes = [];
+					
+					foreach($columns as $index => $column) {
+							$this->addColumnToRow($row, $column);
+							
+							// Track column types for telemetry
+							if(is_array($column) && isset($column['type'])) {
+								$columnTypes[] = $column['type'];
+							} elseif(is_numeric($column)) {
+								$columnTypes[] = 'number';
+							} elseif($column instanceof \DateTime) {
+								$columnTypes[] = 'datetime';
+							} else {
+								$columnTypes[] = 'string';
+							}
+					}
+					
+					$span->addEvent('worksheet.row_added', [
+						'excel.row_index' => $row,
+						'excel.columns_count' => count($columns),
+						'excel.column_types' => implode(',', $columnTypes),
+						'excel.total_rows' => count($this->rows)
+					]);
+					
+					return $this;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
-				return $this;
 		}
 
 		/**
@@ -413,18 +573,50 @@ class ExcelWorksheet
 		}
 
 		public function addRows($array, $calculatedColumns = null){
-				foreach($array as $key => $row) {
-						if(isset($calculatedColumns)){
-								foreach ($calculatedColumns as $calculatedColumn) {
-										if($key == 0){
-												array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['header']);
-										} else {
-												array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['content']);
-										}
-								}
-						}
-						$this->addRow($row);
+				self::$instrumentation ??= new CachedInstrumentation('svrnm-exceldatatables');
+				
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorksheet.addRows')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'worksheet.add_rows')
+						->setAttribute('excel.rows_count', count($array))
+						->setAttribute('excel.has_calculated_columns', $calculatedColumns !== null)
+						->setAttribute('excel.calculated_columns_count', $calculatedColumns ? count($calculatedColumns) : 0)
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'addRows')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorksheet')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					$processedRows = 0;
+					foreach($array as $key => $row) {
+							if(isset($calculatedColumns)){
+									foreach ($calculatedColumns as $calculatedColumn) {
+											if($key == 0){
+													array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['header']);
+											} else {
+													array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['content']);
+											}
+									}
+							}
+							$this->addRow($row);
+							$processedRows++;
+					}
+					
+					$span->addEvent('worksheet.rows_added', [
+						'excel.processed_rows' => $processedRows,
+						'excel.total_rows' => count($this->rows)
+					]);
+					
+					return $this;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
-				return $this;
 		}
 }

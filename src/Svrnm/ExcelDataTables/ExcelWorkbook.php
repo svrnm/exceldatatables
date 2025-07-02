@@ -2,6 +2,12 @@
 
 namespace Svrnm\ExcelDataTables;
 
+use OpenTelemetry\API\Instrumentation\CachedInstrumentation;
+use OpenTelemetry\API\Trace\Propagation\TraceContextPropagator;
+use OpenTelemetry\API\Trace\SpanKind;
+use OpenTelemetry\API\Trace\StatusCode;
+use OpenTelemetry\SemConv\TraceAttributes;
+
 /**
  * This class is a simple representation of a excel workbook. It expects
  * a xlsx formatted spreadsheet as paramater and overwrites(!) existing
@@ -12,6 +18,11 @@ namespace Svrnm\ExcelDataTables;
  */
 class ExcelWorkbook implements \Countable
 {
+		/**
+		 * @var CachedInstrumentation
+		 */
+		private static $instrumentation;
+
 		/**
 		 * The source filename
 		 *
@@ -78,13 +89,68 @@ class ExcelWorkbook implements \Countable
 		 * @param string $filename
 		 */
 		public function __construct($filename) {
-				$this->srcFilename = $filename;
-				$this->targetFilename = $filename;
+				self::$instrumentation ??= new CachedInstrumentation('svrnm-exceldatatables');
+				
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.__construct')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.init')
+						->setAttribute('excel.source_file', basename($filename))
+						->setAttribute(TraceAttributes::CODE_FUNCTION, '__construct')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+						$this->srcFilename = $filename;
+						$this->targetFilename = $filename;
+						
+						$span->addEvent('workbook.initialized', [
+								'excel.source_filename' => basename($filename),
+								'excel.auto_save' => $this->autoSave,
+								'excel.auto_calculation' => $this->autoCalculation
+						]);
+						
+				} catch (\Throwable $e) {
+						$span->recordException($e);
+						$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+						throw $e;
+				} finally {
+						$span->end();
+						$scope->detach();
+				}
 		}
 
 		public function __destruct() {
-				if(!is_null($this->xlsx)) {
-					$this->getXLSX()->close();
+				if (self::$instrumentation === null) {
+						if(!is_null($this->xlsx)) {
+							$this->getXLSX()->close();
+						}
+						return;
+				}
+
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.__destruct')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.cleanup')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, '__destruct')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+						if(!is_null($this->xlsx)) {
+							$this->getXLSX()->close();
+							$span->addEvent('workbook.xlsx_closed');
+						}
+				} catch (\Throwable $e) {
+						$span->recordException($e);
+						$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+				} finally {
+						$span->end();
+						$scope->detach();
 				}
 		}
 
@@ -94,8 +160,24 @@ class ExcelWorkbook implements \Countable
 		 * @return $this
 		 */
 		public function enableAutoSave() {
-				$this->autoSave = true;
-				return $this;
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.enableAutoSave')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.config')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'enableAutoSave')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+						$this->autoSave = true;
+						$span->addEvent('workbook.auto_save_enabled');
+						return $this;
+				} finally {
+						$span->end();
+						$scope->detach();
+				}
 		}
 
 		/**
@@ -104,20 +186,43 @@ class ExcelWorkbook implements \Countable
 		 * @return $this
 		 */
 		public function enableAutoCalculation($value = true) {
-			$this->autoCalculation = (bool)$value;
+			$tracer = self::$instrumentation->tracer();
+			$span = $tracer->spanBuilder('ExcelWorkbook.enableAutoCalculation')
+					->setSpanKind(SpanKind::KIND_INTERNAL)
+					->setAttribute('excel.operation', 'workbook.config')
+					->setAttribute('excel.auto_calculation', (bool)$value)
+					->setAttribute(TraceAttributes::CODE_FUNCTION, 'enableAutoCalculation')
+					->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+					->startSpan();
 
-			$calcPr = $this->getWorkbook()->getElementsByTagName('calcPr')->item(0);
+			$scope = $span->activate();
+			
+			try {
+				$this->autoCalculation = (bool)$value;
 
-			if(is_null($calcPr)) {
-				$calcPr = $this->getWorkbook()->createElement('calcPr');
+				$calcPr = $this->getWorkbook()->getElementsByTagName('calcPr')->item(0);
+
+				if(is_null($calcPr)) {
+					$calcPr = $this->getWorkbook()->createElement('calcPr');
+					$span->addEvent('workbook.calc_pr_created');
+				}
+
+				$calcPr->setAttribute('fullCalcOnLoad', $this->autoCalculation ? '1' : '0');
+				$span->addEvent('workbook.calc_pr_updated', [
+					'excel.full_calc_on_load' => $this->autoCalculation
+				]);
+
+				$this->saveWorkbook();
+
+				return $this;
+			} catch (\Throwable $e) {
+				$span->recordException($e);
+				$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+				throw $e;
+			} finally {
+				$span->end();
+				$scope->detach();
 			}
-
-
-			$calcPr->setAttribute('fullCalcOnLoad', $this->autoCalculation ? '1' : '0');
-
-			$this->saveWorkbook();
-
-			return $this;
 		}
 
 		/**
@@ -126,8 +231,24 @@ class ExcelWorkbook implements \Countable
 		 * @return $this
 		 */
 		public function disableAutoSave() {
-				$this->autoSave = false;
-				return $this;
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.disableAutoSave')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.config')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'disableAutoSave')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+						$this->autoSave = false;
+						$span->addEvent('workbook.auto_save_disabled');
+						return $this;
+				} finally {
+						$span->end();
+						$scope->detach();
+				}
 		}
 
 		/**
@@ -145,9 +266,32 @@ class ExcelWorkbook implements \Countable
 		 * @return int
 		 */
 		public function count(): int {
-				$sheets = $this->getWorkbook()->getElementsByTagName('sheet');
-				return $sheets->length;
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.count')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.count')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'count')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
 
+				$scope = $span->activate();
+				
+				try {
+						$sheets = $this->getWorkbook()->getElementsByTagName('sheet');
+						$count = $sheets->length;
+						
+						$span->setAttribute('excel.worksheet_count', $count);
+						$span->addEvent('workbook.worksheets_counted', ['excel.count' => $count]);
+						
+						return $count;
+				} catch (\Throwable $e) {
+						$span->recordException($e);
+						$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+						throw $e;
+				} finally {
+						$span->end();
+						$scope->detach();
+				}
 		}
 
 		/**
@@ -158,8 +302,31 @@ class ExcelWorkbook implements \Countable
 		 * @return $this
 		 */
 		public function setFilename($filename) {
-				$this->targetFilename = $filename;
-				return $this;
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.setFilename')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.config')
+						->setAttribute('excel.target_file', basename($filename))
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'setFilename')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+						$oldFilename = $this->targetFilename;
+						$this->targetFilename = $filename;
+						
+						$span->addEvent('workbook.target_filename_changed', [
+								'excel.old_filename' => basename($oldFilename),
+								'excel.new_filename' => basename($filename)
+						]);
+						
+						return $this;
+				} finally {
+						$span->end();
+						$scope->detach();
+				}
 		}
 
 		/**
@@ -180,13 +347,39 @@ class ExcelWorkbook implements \Countable
 		 * @return string|DOMDocument
 		 */
 		public function getWorksheetById($id, $asDocument = false) {
-				$r = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
-				if($asDocument && $r !== false) {
-						$dom = new \DOMDocument();
-						$dom->loadXML($r);
-						return $dom;
-				} else {
-						return $r;
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.getWorksheetById')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.get_worksheet')
+						->setAttribute('excel.worksheet_id', $id)
+						->setAttribute('excel.as_document', $asDocument)
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'getWorksheetById')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+						$r = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
+						if($asDocument && $r !== false) {
+								$dom = new \DOMDocument();
+								$dom->loadXML($r);
+								$span->addEvent('workbook.worksheet_loaded_as_document', ['excel.worksheet_id' => $id]);
+								return $dom;
+						} else {
+								$span->addEvent('workbook.worksheet_loaded_as_string', [
+									'excel.worksheet_id' => $id,
+									'excel.success' => $r !== false
+								]);
+								return $r;
+						}
+				} catch (\Throwable $e) {
+						$span->recordException($e);
+						$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+						throw $e;
+				} finally {
+						$span->end();
+						$scope->detach();
 				}
 		}
 
@@ -195,130 +388,206 @@ class ExcelWorkbook implements \Countable
 		 */
 		public function getSheetIdByName($name)
 		{
-				$sheets = $this->getWorkbook()->getElementsByTagName('sheet');
-				foreach ($sheets as $index => $sheet) {
-						if ($sheet->getAttribute('name') === $name) {
-								return $index + 1;
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.getSheetIdByName')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.get_sheet_id')
+						->setAttribute('excel.sheet_name', $name)
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'getSheetIdByName')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+						$sheets = $this->getWorkbook()->getElementsByTagName('sheet');
+						foreach ($sheets as $index => $sheet) {
+								if ($sheet->getAttribute('name') === $name) {
+										$id = $sheet->getAttribute('sheetId');
+										$span->addEvent('workbook.sheet_found', [
+											'excel.sheet_name' => $name,
+											'excel.sheet_id' => $id,
+											'excel.sheet_index' => $index
+										]);
+										return $id;
+								}
 						}
+						
+						$span->addEvent('workbook.sheet_not_found', ['excel.sheet_name' => $name]);
+						return null;
+				} catch (\Throwable $e) {
+						$span->recordException($e);
+						$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+						throw $e;
+				} finally {
+						$span->end();
+						$scope->detach();
 				}
-				return null;
 		}
 
 		public function getTableIdByName($name)
 		{
-				$id = 1;
-				while ($this->getXLSX()->statName('xl/tables/table' . $id . '.xml') !== false) {
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.getTableIdByName')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.get_table_id')
+						->setAttribute('excel.table_name', $name)
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'getTableIdByName')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
 
-						$xml = $this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml');
-						$dom = new \DOMDocument();
-						$dom->loadXML($xml);
-						$table = $dom->getElementsByTagName('table')->item(0);
-
-						if ($table->getAttribute('name') === $name) {
-								return $id;
+				$scope = $span->activate();
+				
+				try {
+						$workbookRels = $this->getXLSX()->getFromName('xl/_rels/workbook.xml.rels');
+						if ($workbookRels === false) {
+							$span->addEvent('workbook.workbook_rels_not_found');
+							return null;
 						}
+						
+						$relsDom = new \DOMDocument();
+						$relsDom->loadXML($workbookRels);
+						$relationships = $relsDom->getElementsByTagName('Relationship');
 
-						$id++;
-				}
-		}
+						for ($i = 1; $i <= 100; $i++) {
+								$tablePath = 'xl/tables/table' . $i . '.xml';
+								$tableXML = $this->getXLSX()->getFromName($tablePath);
+								if ($tableXML === false) continue;
 
-		/**
-		 * Check if a worksheet with name $name already exists. If not $name is
-		 * returned. Otherwise $name_<i> is incremented until the name is unique.
-		 *
-		 * @param $name
-		 * @return string
-		 */
-		protected function uniqName($name) {
-				$sheets = $this->getWorkbook()->getElementsByTagName('sheet');
-				$names = array();
-				foreach($sheets as $sheet) {
-						$names[] = $sheet->getAttribute('name');
-				}
-				$i = 0;
-				$origName = $name;
-				while(in_array($name, $names)) {
-						$name = $origName.'_'.$i;
-				}
-				return $name;
-		}
-
-		/**
-		 * Extract or create a date time format from the styles.xml. Some guessing is used to find
-		 * a matching id. If no interesting format is find, a new format is created
-		 *
-		 * @return int
-		 */
-		protected function dateTimeFormatId() {
-				$formats = $this->getStyles()->getElementsByTagName('numFmt');
-				$exists = false;
-				$generalId = 14;
-				$numFmtId = false;
-				$highestId = 164;
-				$maxScore = 3;
-				for($id = 0; $id < $formats->length; ++$id) {
-						$format = $formats->item($id);
-						$code = strtoupper($format->getAttribute('formatCode'));
-						$currentId = $format->getAttribute('numFmtId');
-						if($currentId > $highestId) {
-								$highestId = $currentId;
-						}
-						if($code === "DD/MM/YYYY\ HH:MM:SS") {
-								$numFmtId = $currentId;
-								$exists = true;
-						} else {
-								// Do some "guessing" if the current format is "good enough"
-								$score 	= (strpos($code, 'YY') !== false ? 1 : 0)
-										+ (strpos($code, 'YYYY') !== false ? 1 : 0)
-										+ (strpos($code, 'MM') !== false ? 1 : 0)
-										+ (strpos($code, 'D') !== false ? 1 : 0)
-										+ (strpos($code, 'DD') !== false ? 1 : 0)
-										+ (strpos($code, 'HH') !== false ? 1 : 0)
-										+ (strpos($code, 'HH:MM') !== false ? 1 : 0)
-										+ (strpos($code, 'HH:MM:SS') !== false ? 1 : 0);
-								if($score > $maxScore) {
-										$maxScore = $score;
-										$exists = true;
-										$numFmtId = $currentId;
+								$tableDom = new \DOMDocument();
+								$tableDom->loadXML($tableXML);
+								$tables = $tableDom->getElementsByTagName('table');
+								if ($tables->length > 0) {
+										$table = $tables->item(0);
+										if ($table->getAttribute('displayName') === $name) {
+											$span->addEvent('workbook.table_found', [
+												'excel.table_name' => $name,
+												'excel.table_id' => $i,
+												'excel.table_path' => $tablePath
+											]);
+											return $i;
+										}
 								}
 						}
+						
+						$span->addEvent('workbook.table_not_found', ['excel.table_name' => $name]);
+						return null;
+				} catch (\Throwable $e) {
+						$span->recordException($e);
+						$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+						throw $e;
+				} finally {
+						$span->end();
+						$scope->detach();
 				}
-				if($numFmtId === false) {
-						$numFmtId = $highestId+1;
-						$numFmts = $this->getStyles()->getElementsByTagName('numFmts')->item(0);
+		}
 
-						if(is_null($numFmts)) {
-							$numFmts = $this->getStyles()->createElement('numFmts');
+		protected function uniqName($name) {
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.uniqName')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.generate_unique_name')
+						->setAttribute('excel.requested_name', $name)
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'uniqName')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+						$sheets = $this->getWorkbook()->getElementsByTagName('sheet');
+						$names = array();
+						foreach ($sheets as $sheet) {
+								$names[] = $sheet->getAttribute('name');
+						}
+						$i = 0;
+						$newName = $name;
+						while (in_array($newName, $names)) {
+								$newName = $name . ' (' . (++$i) . ')';
+						}
+						
+						$span->addEvent('workbook.unique_name_generated', [
+							'excel.requested_name' => $name,
+							'excel.unique_name' => $newName,
+							'excel.iterations' => $i
+						]);
+						
+						return $newName;
+				} catch (\Throwable $e) {
+						$span->recordException($e);
+						$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+						throw $e;
+				} finally {
+						$span->end();
+						$scope->detach();
+				}
+		}
+
+		protected function dateTimeFormatId() {
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.dateTimeFormatId')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.get_datetime_format')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'dateTimeFormatId')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+						$styles = $this->getStyles();
+
+						$cellXfs = $styles->getElementsByTagName('cellXfs')->item(0);
+						if (is_null($cellXfs)) {
+							$span->addEvent('workbook.no_cellxfs_found');
+							return 1;
+						}
+						
+						$numFmts = $styles->getElementsByTagName('numFmts')->item(0);
+						if (is_null($numFmts)) {
+								$numFmts = $styles->createElement('numFmts');
+								$numFmts->setAttribute('count', '1');
+								$styles->getElementsByTagName('styleSheet')->item(0)->insertBefore($numFmts, $cellXfs->parentNode);
+								$span->addEvent('workbook.numfmts_created');
 						}
 
-						$numFmt = $this->getStyles()->createElement('numFmt');
-						$numFmt->setAttribute('numFmtId', $numFmtId);
-						$numFmt->setAttribute('formatCode', 'DD/MM/YYYY\ HH:MM:SS');
+						$id = 164;
+						$numFmt = $styles->createElement('numFmt');
+						$numFmt->setAttribute('numFmtId', $id);
+						$numFmt->setAttribute('formatCode', 'dd/mm/yyyy hh:mm:ss');
 
 						$numFmts->appendChild($numFmt);
-						$numFmts->setAttribute('count', (int)$numFmts->getAttribute('count')+1);
-				}
+						$numFmts->setAttribute('count', $numFmts->getElementsByTagName('numFmt')->length);
 
-				$cellXfs = $this->getStyles()->getElementsByTagName('cellXfs')->item(0);
-				//$xfs = $this->getStyles()->getElementsByTagName('xf');
-				$xfs = $cellXfs->childNodes;
-				$result = false;
-				for($i = 0; $i < $xfs->length; $i++) {
-						$xf = $xfs->item($i);
-						if($xf->getAttribute('numFmtId') == $numFmtId) {
-								$result = $i;
-						}
-				}
-				if($result === false) {
-						$result = $cellXfs->getAttribute('count');
-						$xf = $this->getStyles()->createElement('xf');
-						$xf->setAttribute('numFmtId', $numFmtId);
-						$xf->setAttribute('applyNumberFormat', 1);
+						$xf = $styles->createElement('xf');
+						$xf->setAttribute('numFmtId', $id);
+						$xf->setAttribute('fontId', '0');
+						$xf->setAttribute('fillId', '0');
+						$xf->setAttribute('borderId', '0');
+						$xf->setAttribute('xfId', '0');
+						$xf->setAttribute('applyNumberFormat', '1');
+
 						$cellXfs->appendChild($xf);
-						$cellXfs->setAttribute('count', $result+1);
+						$cellXfs->setAttribute('count', $cellXfs->getElementsByTagName('xf')->length);
+
+						$this->saveStyles();
+
+						$formatId = $cellXfs->getElementsByTagName('xf')->length - 1;
+						
+						$span->addEvent('workbook.datetime_format_created', [
+							'excel.format_id' => $formatId,
+							'excel.num_fmt_id' => $id
+						]);
+						
+						return $formatId;
+				} catch (\Throwable $e) {
+						$span->recordException($e);
+						$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+						throw $e;
+				} finally {
+						$span->end();
+						$scope->detach();
 				}
-				$this->saveStyles();
-				return $result;
 		}
 
 		/**
@@ -332,35 +601,71 @@ class ExcelWorkbook implements \Countable
 		 * @param string $name
 		 */
 		public function addWorksheet(ExcelWorksheet $worksheet, $id = null, $name = null) {
-				$name = !is_null($name) ? $name : $this->sheetName;
-				if ($id === null) $id = $this->getSheetIdByName($name);
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.addWorksheet')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.add_worksheet')
+						->setAttribute('excel.worksheet_name', $name ?: $this->sheetName)
+						->setAttribute('excel.worksheet_id', $id)
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'addWorksheet')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
 
-				if(is_null($id) || $id <= 0) {
-					throw new \Exception('Sheet with name "'.$name.'" not found in file '.$this->srcFilename.'. Appending is not yet implemented.');
-					/*
-					// find a unused id in the worksheets
-					$id = 1;
-					while($this->getXLSX()->statName('xl/worksheets/sheet'.($id++).'.xml') !== false) {}
-					*/
-				}
+				$scope = $span->activate();
+				
+				try {
+					$name = !is_null($name) ? $name : $this->sheetName;
+					if ($id === null) $id = $this->getSheetIdByName($name);
 
-				$old = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
-				if($old === false) {
-						throw new \Exception('Appending new sheets is not yet implemented: SheetId:' . $id .', SourceFile:'. $this->srcFilename.', TargetFile:'.$this->targetFilename);
-				} else {
-						$document = new \DOMDocument();
-						$document->loadXML($old);
-						$oldSheetData = $document->getElementsByTagName('sheetData')->item(0);
-						$worksheet->setDateTimeFormatId($this->dateTimeFormatId());
-						$newSheetData = $document->importNode( $worksheet->getDocument()->getElementsByTagName('sheetData')->item(0), true );
-						$oldSheetData->parentNode->replaceChild($newSheetData, $oldSheetData);
-						$xml = $document->saveXML();
-						$this->getXLSX()->addFromString('xl/worksheets/sheet'.$id.'.xml', $xml);
+					$span->addEvent('workbook.worksheet_lookup_complete', [
+						'excel.resolved_name' => $name,
+						'excel.resolved_id' => $id
+					]);
+
+					if(is_null($id) || $id <= 0) {
+						$span->addEvent('workbook.worksheet_not_found', ['excel.sheet_name' => $name]);
+						throw new \Exception('Sheet with name "'.$name.'" not found in file '.$this->srcFilename.'. Appending is not yet implemented.');
+						/*
+						// find a unused id in the worksheets
+						$id = 1;
+						while($this->getXLSX()->statName('xl/worksheets/sheet'.($id++).'.xml') !== false) {}
+						*/
+					}
+
+					$old = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
+					if($old === false) {
+							$span->addEvent('workbook.worksheet_file_not_found', ['excel.worksheet_id' => $id]);
+							throw new \Exception('Appending new sheets is not yet implemented: SheetId:' . $id .', SourceFile:'. $this->srcFilename.', TargetFile:'.$this->targetFilename);
+					} else {
+							$span->addEvent('workbook.worksheet_replacement_start', ['excel.worksheet_id' => $id]);
+							
+							$document = new \DOMDocument();
+							$document->loadXML($old);
+							$oldSheetData = $document->getElementsByTagName('sheetData')->item(0);
+							$worksheet->setDateTimeFormatId($this->dateTimeFormatId());
+							$newSheetData = $document->importNode( $worksheet->getDocument()->getElementsByTagName('sheetData')->item(0), true );
+							$oldSheetData->parentNode->replaceChild($newSheetData, $oldSheetData);
+							$xml = $document->saveXML();
+							$this->getXLSX()->addFromString('xl/worksheets/sheet'.$id.'.xml', $xml);
+							
+							$span->addEvent('workbook.worksheet_replacement_complete', [
+								'excel.worksheet_id' => $id,
+								'excel.xml_size' => strlen($xml)
+							]);
+					}
+					if($this->isAutoSaveEnabled()) {
+							$span->addEvent('workbook.auto_save_triggered');
+							$this->save();
+					}
+					return $this;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
-				if($this->isAutoSaveEnabled()) {
-						$this->save();
-				}
-				return $this;
 		}
 
 		/**
@@ -372,55 +677,120 @@ class ExcelWorkbook implements \Countable
 		 */
 		public function refreshTableRange($tableName, $numRows)
 		{
-				$id = $this->getTableIdByName($tableName);
-				if (is_null($id)) {
-					throw new \Exception('table "' . $tableName . '" not found');
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.refreshTableRange')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.refresh_table_range')
+						->setAttribute('excel.table_name', $tableName)
+						->setAttribute('excel.num_rows', $numRows)
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'refreshTableRange')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					$id = $this->getTableIdByName($tableName);
+					if (is_null($id)) {
+						$span->addEvent('workbook.table_not_found', ['excel.table_name' => $tableName]);
+						throw new \Exception('table "' . $tableName . '" not found');
+					}
+
+					$span->addEvent('workbook.table_found', ['excel.table_id' => $id]);
+
+					$document = new \DOMDocument();
+					$document->loadXML($this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml'));
+
+					$table = $document->getElementsByTagName('table')->item(0);
+					if (is_null($table)) {
+						$span->addEvent('workbook.table_element_not_found');
+						throw new \Exception('could not read "table" from document; '.$document);
+					}
+
+					$ref = $table->getAttribute('ref');
+					$nref = preg_replace('/^(\w+\:[A-Z]+)(\d+)$/', '${1}' . $numRows, $ref);
+
+					$span->addEvent('workbook.table_range_updated', [
+						'excel.old_ref' => $ref,
+						'excel.new_ref' => $nref,
+						'excel.num_rows' => $numRows
+					]);
+
+					$table->setAttribute('ref', $nref);
+
+					$this->getXLSX()->addFromString('xl/tables/table' . $id . '.xml', $document->saveXML());
+
+					return $this;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
-
-				$document = new \DOMDocument();
-				$document->loadXML($this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml'));
-
-				$table = $document->getElementsByTagName('table')->item(0);
-				if (is_null($table)) {
-					throw new \Exception('could not read "table" from document; '.$document);
-				}
-
-				$ref = $table->getAttribute('ref');
-
-				$nref = preg_replace('/^(\w+\:[A-Z]+)(\d+)$/', '${1}' . $numRows, $ref);
-
-				$table->setAttribute('ref', $nref);
-
-				$this->getXLSX()->addFromString('xl/tables/table' . $id . '.xml', $document->saveXML());
-
-				return $this;
 		}
 
 		public function getCalculatedColumns($tableName)
 		{
-				$id = $this->getTableIdByName($tableName);
-				if(isset($id)){
-						$document = new \DOMDocument();
-						$document->loadXML($this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml'));
-						$columns = $document->getElementsByTagName('tableColumn');
-						foreach($columns as $key => $column) {
-								if($column->getElementsByTagName("calculatedColumnFormula")->length){
-										$header = $column->getAttribute('name');
-										$formula = $column->nodeValue;
-										$calculatedColumn = array(
-												'index' => $key,
-												'header' => $header,
-												'content' => array(
-														$header => array(
-																'type' => 'formula',
-																'value' => $formula,
-														)
-												)
-										);
-										$calculatedColumns[] = $calculatedColumn;
-								}
-						}
-						return $calculatedColumns;
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.getCalculatedColumns')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.get_calculated_columns')
+						->setAttribute('excel.table_name', $tableName)
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'getCalculatedColumns')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					$id = $this->getTableIdByName($tableName);
+					if(isset($id)){
+							$span->addEvent('workbook.calculated_columns_processing_start', ['excel.table_id' => $id]);
+							
+							$document = new \DOMDocument();
+							$document->loadXML($this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml'));
+							$columns = $document->getElementsByTagName('tableColumn');
+							$calculatedColumns = [];
+							$calculatedCount = 0;
+							
+							foreach($columns as $key => $column) {
+									if($column->getElementsByTagName("calculatedColumnFormula")->length){
+											$header = $column->getAttribute('name');
+											$formula = $column->nodeValue;
+											$calculatedColumn = array(
+													'index' => $key,
+													'header' => $header,
+													'content' => array(
+															$header => array(
+																	'type' => 'formula',
+																	'value' => $formula,
+															)
+													)
+											);
+											$calculatedColumns[] = $calculatedColumn;
+											$calculatedCount++;
+									}
+							}
+							
+							$span->addEvent('workbook.calculated_columns_processed', [
+								'excel.total_columns' => $columns->length,
+								'excel.calculated_columns_count' => $calculatedCount
+							]);
+							
+							return $calculatedColumns;
+					}
+					
+					$span->addEvent('workbook.table_id_not_found', ['excel.table_name' => $tableName]);
+					return null;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
 		}
 
@@ -430,10 +800,32 @@ class ExcelWorkbook implements \Countable
 		 * @return ZipArchive
 		 */
 		public function getXLSX() {
-				if(is_null($this->xlsx)) {
-						$this->openXLSX();
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.getXLSX')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.get_xlsx')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'getXLSX')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					if(is_null($this->xlsx)) {
+							$span->addEvent('workbook.xlsx_not_initialized');
+							$this->openXLSX();
+					} else {
+							$span->addEvent('workbook.xlsx_already_available');
+					}
+					return $this->xlsx;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
-				return $this->xlsx;
 		}
 
 		/**
@@ -444,19 +836,54 @@ class ExcelWorkbook implements \Countable
 		 * @return $this
 		 */
 		protected function openXLSX() {
-				$this->xlsx = new \ZipArchive;
-				if(!file_exists($this->srcFilename) && is_readable($this->srcFilename)) {
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.openXLSX')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.open_xlsx')
+						->setAttribute('excel.source_file', basename($this->srcFilename))
+						->setAttribute('excel.target_file', basename($this->targetFilename))
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'openXLSX')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					$this->xlsx = new \ZipArchive;
+					$span->addEvent('workbook.ziparchive_created');
+					
+					if(!file_exists($this->srcFilename) || !is_readable($this->srcFilename)) {
+						$span->addEvent('workbook.source_file_not_accessible', [
+							'excel.file_exists' => file_exists($this->srcFilename),
+							'excel.file_readable' => is_readable($this->srcFilename)
+						]);
 						throw new \Exception('File does not exists: '.$this->srcFilename);
-				}
-				if($this->srcFilename !== $this->targetFilename) {
+					}
+					
+					if($this->srcFilename !== $this->targetFilename) {
+						$span->addEvent('workbook.copying_source_to_target');
+						$sourceSize = filesize($this->srcFilename);
 						file_put_contents($this->targetFilename, file_get_contents($this->srcFilename));
 						$this->srcFilename = $this->targetFilename;
-				}
-				$isOpen = $this->xlsx->open($this->targetFilename);
-				if($isOpen !== true) {
+						$span->addEvent('workbook.file_copied', ['excel.file_size' => $sourceSize]);
+					}
+					
+					$isOpen = $this->xlsx->open($this->targetFilename);
+					if($isOpen !== true) {
+						$span->addEvent('workbook.xlsx_open_failed', ['excel.error_code' => $isOpen]);
 						throw new \Exception('Could not open file: '.$this->targetFilename.' [ZipArchive error code: '.$isOpen.']');
+					}
+					
+					$span->addEvent('workbook.xlsx_opened_successfully');
+					return $this;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
-				return $this;
 		}
 
 		/**
@@ -465,10 +892,41 @@ class ExcelWorkbook implements \Countable
 		 * @return $this
 		 */
 		public function save() {
-				$this->getXLSX()->close();
-				$this->srcFilename = $this->targetFilename;
-				$this->openXLSX();
-				return $this;
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.save')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.save')
+						->setAttribute('excel.target_file', basename($this->targetFilename))
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'save')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					$span->addEvent('workbook.save_start');
+					
+					$this->getXLSX()->close();
+					$span->addEvent('workbook.xlsx_closed');
+					
+					$this->srcFilename = $this->targetFilename;
+					$span->addEvent('workbook.filename_synchronized');
+					
+					$this->openXLSX();
+					$span->addEvent('workbook.xlsx_reopened');
+					
+					$fileSize = file_exists($this->targetFilename) ? filesize($this->targetFilename) : 0;
+					$span->addEvent('workbook.save_complete', ['excel.file_size' => $fileSize]);
+					
+					return $this;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
+				}
 		}
 
 
@@ -478,15 +936,43 @@ class ExcelWorkbook implements \Countable
 		 * @return DOMDocument
 		 */
 		public function getWorkbook() {
-				if(is_null($this->workbook)) {
-						$this->workbook = new \DOMDocument();
-						$workbookFile = $this->getXLSX()->getFromName('xl/workbook.xml');
-						if ($workbookFile === false) {
-							throw new \Exception('Could not find xl/workbook.xml in "'.$this->targetFilename.'"');
-						}
-						$this->workbook->loadXML($workbookFile);
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.getWorkbook')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.get_workbook_xml')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'getWorkbook')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					if(is_null($this->workbook)) {
+							$span->addEvent('workbook.workbook_xml_not_loaded');
+							
+							$this->workbook = new \DOMDocument();
+							$workbookFile = $this->getXLSX()->getFromName('xl/workbook.xml');
+							if ($workbookFile === false) {
+								$span->addEvent('workbook.workbook_xml_not_found');
+								throw new \Exception('Could not find xl/workbook.xml in "'.$this->targetFilename.'"');
+							}
+							$this->workbook->loadXML($workbookFile);
+							
+							$span->addEvent('workbook.workbook_xml_loaded', [
+								'excel.xml_size' => strlen($workbookFile)
+							]);
+					} else {
+							$span->addEvent('workbook.workbook_xml_already_available');
+					}
+					return $this->workbook;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
-				return $this->workbook;
 		}
 
 		/**
@@ -495,11 +981,43 @@ class ExcelWorkbook implements \Countable
 		 * @return DOMDocument
 		 */
 		public function getStyles() {
-				if(is_null($this->styles)) {
-						$this->styles = new \DOMDocument();
-						$this->styles->loadXML($this->getXLSX()->getFromName('xl/styles.xml'));
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.getStyles')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.get_styles_xml')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'getStyles')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					if(is_null($this->styles)) {
+							$span->addEvent('workbook.styles_xml_not_loaded');
+							
+							$this->styles = new \DOMDocument();
+							$stylesFile = $this->getXLSX()->getFromName('xl/styles.xml');
+							if ($stylesFile === false) {
+								$span->addEvent('workbook.styles_xml_not_found');
+								throw new \Exception('Could not find xl/styles.xml');
+							}
+							$this->styles->loadXML($stylesFile);
+							
+							$span->addEvent('workbook.styles_xml_loaded', [
+								'excel.xml_size' => strlen($stylesFile)
+							]);
+					} else {
+							$span->addEvent('workbook.styles_xml_already_available');
+					}
+					return $this->styles;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
-				return $this->styles;
 		}
 
 		/**
@@ -508,11 +1026,37 @@ class ExcelWorkbook implements \Countable
 		 * return @this
 		 */
 		public function saveWorkbook() {
-			$this->getXLSX()->addFromString('xl/workbook.xml', $this->getWorkbook()->saveXML());
-			if($this->isAutoSaveEnabled()) {
-				$this->save();
+			$tracer = self::$instrumentation->tracer();
+			$span = $tracer->spanBuilder('ExcelWorkbook.saveWorkbook')
+					->setSpanKind(SpanKind::KIND_INTERNAL)
+					->setAttribute('excel.operation', 'workbook.save_workbook_xml')
+					->setAttribute(TraceAttributes::CODE_FUNCTION, 'saveWorkbook')
+					->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+					->startSpan();
+
+			$scope = $span->activate();
+			
+			try {
+				$workbookXML = $this->getWorkbook()->saveXML();
+				$this->getXLSX()->addFromString('xl/workbook.xml', $workbookXML);
+				
+				$span->addEvent('workbook.workbook_xml_saved', [
+					'excel.xml_size' => strlen($workbookXML)
+				]);
+				
+				if($this->isAutoSaveEnabled()) {
+					$span->addEvent('workbook.auto_save_triggered');
+					$this->save();
+				}
+				return $this;
+			} catch (\Throwable $e) {
+				$span->recordException($e);
+				$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+				throw $e;
+			} finally {
+				$span->end();
+				$scope->detach();
 			}
-			return $this;
 		}
 
 		/**
@@ -521,11 +1065,37 @@ class ExcelWorkbook implements \Countable
 		 * return @this
 		 */
 		public function saveStyles() {
-				$this->getXLSX()->addFromString('xl/styles.xml', $this->getStyles()->saveXML());
-				if($this->isAutoSaveEnabled()) {
+				$tracer = self::$instrumentation->tracer();
+				$span = $tracer->spanBuilder('ExcelWorkbook.saveStyles')
+						->setSpanKind(SpanKind::KIND_INTERNAL)
+						->setAttribute('excel.operation', 'workbook.save_styles_xml')
+						->setAttribute(TraceAttributes::CODE_FUNCTION, 'saveStyles')
+						->setAttribute(TraceAttributes::CODE_NAMESPACE, 'Svrnm\\ExcelDataTables\\ExcelWorkbook')
+						->startSpan();
+
+				$scope = $span->activate();
+				
+				try {
+					$stylesXML = $this->getStyles()->saveXML();
+					$this->getXLSX()->addFromString('xl/styles.xml', $stylesXML);
+					
+					$span->addEvent('workbook.styles_xml_saved', [
+						'excel.xml_size' => strlen($stylesXML)
+					]);
+					
+					if($this->isAutoSaveEnabled()) {
+						$span->addEvent('workbook.auto_save_triggered');
 						$this->save();
+					}
+					return $this;
+				} catch (\Throwable $e) {
+					$span->recordException($e);
+					$span->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+					throw $e;
+				} finally {
+					$span->end();
+					$scope->detach();
 				}
-				return $this;
 		}
 
 }
