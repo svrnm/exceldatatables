@@ -17,6 +17,7 @@ namespace Svrnm\ExcelDataTables;
  */
 class ExcelDataTable
 {
+		use OpenTelemetryTrait;
 
 		/**
 		 * The internal representation of the data table
@@ -119,10 +120,21 @@ class ExcelDataTable
 		 * @return $this
 		 */
 		public function addRows($rows) {
-				foreach($rows as $row) {
-						$this->addRow($row);
-				}
-				return $this;
+				return $this->traceOperation('excel.data.add_rows', function($span) use ($rows) {
+						$rowCount = count($rows);
+						$this->addPerformanceAttributes($span, $rowCount);
+						
+						foreach($rows as $row) {
+								$this->addRow($row);
+						}
+						
+						// Update span with final column count after processing
+						if ($this->headersDefined && !empty($this->headerNumbers)) {
+								$span->setAttribute('excel.columns.count', count($this->headerNumbers));
+						}
+						
+						return $this;
+				});
 		}
 
 		/**
@@ -326,14 +338,18 @@ class ExcelDataTable
 		 * @return array
 		 */
 		public function toArray() {
-				$arr = array();
-				if($this->areHeadersVisible()) {
-						$arr[] = $this->headerLabels;
-				}
-				foreach($this->data as $row) {
-						$arr[] = $this->fillRow($row);
-				}
-				return $arr;
+				return $this->traceOperation('excel.data.to_array', function($span) {
+						$this->addPerformanceAttributes($span, count($this->data), count($this->headerNumbers));
+						
+						$arr = array();
+						if($this->areHeadersVisible()) {
+								$arr[] = $this->headerLabels;
+						}
+						foreach($this->data as $row) {
+								$arr[] = $this->fillRow($row);
+						}
+						return $arr;
+				});
 		}
 
 		/**
@@ -343,17 +359,22 @@ class ExcelDataTable
 		 * @return string
 		 */
 		public function toCsv($separator = ',', $quote = '', $newLine = PHP_EOL) {
-				return implode(
-						$newLine,
-						array_map(
-								function($elem) use($separator, $quote) {
-										$s = $quote.$separator.$quote;
-										return $quote.implode($s, $elem).$quote;
-								},
-										$this->toArray()
-								)
-						);
-
+				return $this->traceOperation('excel.data.to_csv', function($span) use ($separator, $quote, $newLine) {
+						$this->addPerformanceAttributes($span, count($this->data), count($this->headerNumbers));
+						$span->setAttribute('excel.export.format', 'csv');
+						$span->setAttribute('excel.csv.separator', $separator);
+						
+						return implode(
+								$newLine,
+								array_map(
+										function($elem) use($separator, $quote) {
+												$s = $quote.$separator.$quote;
+												return $quote.implode($s, $elem).$quote;
+										},
+												$this->toArray()
+										)
+								);
+				});
 		}
 
 		/**
@@ -362,8 +383,13 @@ class ExcelDataTable
 		 * @return string
 		 */
 		public function toXML() {
-				$worksheet = new ExcelWorksheet();
-				return $worksheet->addRows($this->toArray())->toXML();
+				return $this->traceOperation('excel.data.to_xml', function($span) {
+						$this->addPerformanceAttributes($span, count($this->data), count($this->headerNumbers));
+						$span->setAttribute('excel.export.format', 'xml');
+						
+						$worksheet = new ExcelWorksheet();
+						return $worksheet->addRows($this->toArray())->toXML();
+				});
 		}
 
 		/**
@@ -412,31 +438,49 @@ class ExcelDataTable
 		 * @return $this
 		 */
 		public function attachToFile($srcFilename, $targetFilename = null, $forceAutoCalculation = false) {
-				$calculatedColumns = null;
-				if ($this->preserveFormulas){
-						$temp_xlsx = new ExcelWorkbook($srcFilename);
-						$calculatedColumns = $temp_xlsx->getCalculatedColumns($this->preserveFormulas);
-						unset($temp_xlsx);
-				}
+				return $this->traceOperation('excel.file.attach', function($span) use ($srcFilename, $targetFilename, $forceAutoCalculation) {
+						// Add file and performance attributes
+						$this->addFileAttributes($span, $srcFilename, 'attach');
+						$this->addPerformanceAttributes($span, count($this->data), count($this->headerNumbers));
+						$this->addWorksheetAttributes($span, $this->sheetName, $this->sheetId);
+						
+						// Add operation-specific attributes
+						$span->setAttribute('excel.file.target', $targetFilename ?? $srcFilename);
+						$span->setAttribute('excel.file.preserve_formulas', $this->preserveFormulas !== null);
+						$span->setAttribute('excel.file.auto_calculation', $forceAutoCalculation);
+						$span->setAttribute('excel.file.refresh_table_range', $this->refreshTableRange !== null);
+						
+						// Get file size for performance monitoring
+						if (file_exists($srcFilename)) {
+								$span->setAttribute('excel.file.size_bytes', filesize($srcFilename));
+						}
+						
+						$calculatedColumns = null;
+						if ($this->preserveFormulas){
+								$temp_xlsx = new ExcelWorkbook($srcFilename);
+								$calculatedColumns = $temp_xlsx->getCalculatedColumns($this->preserveFormulas);
+								unset($temp_xlsx);
+						}
 
-				$xlsx = new ExcelWorkbook($srcFilename);
-				$worksheet = new ExcelWorksheet();
-				if(!is_null($targetFilename)) {
-						$xlsx->setFilename($targetFilename);
-				}
-				$worksheet->addRows($this->toArray(), $calculatedColumns);
-				$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName);
-				if($forceAutoCalculation) {
-					$xlsx->enableAutoCalculation();
-				}
+						$xlsx = new ExcelWorkbook($srcFilename);
+						$worksheet = new ExcelWorksheet();
+						if(!is_null($targetFilename)) {
+								$xlsx->setFilename($targetFilename);
+						}
+						$worksheet->addRows($this->toArray(), $calculatedColumns);
+						$xlsx->addWorksheet($worksheet, $this->sheetId, $this->sheetName);
+						if($forceAutoCalculation) {
+							$xlsx->enableAutoCalculation();
+						}
 
-				if ($this->refreshTableRange) {
-					$xlsx->refreshTableRange($this->refreshTableRange, count($this->data) + 1);
-				}
+						if ($this->refreshTableRange) {
+							$xlsx->refreshTableRange($this->refreshTableRange, count($this->data) + 1);
+						}
 
-				$xlsx->save();
-				unset($xlsx);
-				return $this;
+						$xlsx->save();
+						unset($xlsx);
+						return $this;
+				});
 		}
 
 		/**
@@ -448,11 +492,22 @@ class ExcelDataTable
 		 * @return string
 		 */
 		public function fillXLSX($srcFilename) {
-				$targetFilename = tempnam(sys_get_temp_dir(), 'exceldatatables-');
-				$this->attachToFile($srcFilename, $targetFilename);
-				$result = file_get_contents($targetFilename);
-				unlink($targetFilename);
-				return $result;
+				return $this->traceOperation('excel.file.fill_xlsx', function($span) use ($srcFilename) {
+						$this->addFileAttributes($span, $srcFilename, 'fill');
+						$this->addPerformanceAttributes($span, count($this->data), count($this->headerNumbers));
+						
+						$targetFilename = tempnam(sys_get_temp_dir(), 'exceldatatables-');
+						$span->setAttribute('excel.file.temp_path', $targetFilename);
+						
+						$this->attachToFile($srcFilename, $targetFilename);
+						$result = file_get_contents($targetFilename);
+						
+						// Add result size to span
+						$span->setAttribute('excel.file.result_size_bytes', strlen($result));
+						
+						unlink($targetFilename);
+						return $result;
+				});
 		}
 
 		/**

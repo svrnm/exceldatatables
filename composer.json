@@ -18,7 +18,8 @@
     }
   ],
   "require": {
-    "php": ">=7.0.0"
+    "php": ">=7.0.0",
+    "open-telemetry/api": "^1.0"
   },
   "require-dev": {
     "phpspec/phpspec": "~7.5",

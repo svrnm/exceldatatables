@@ -13,6 +13,7 @@ namespace Svrnm\ExcelDataTables;
  */
 class ExcelWorksheet
 {
+		use OpenTelemetryTrait;
 		/**
 		 * This namespaces are used to setup the XML document.
 		 *
@@ -158,8 +159,17 @@ class ExcelWorksheet
 		 * @return string
 		 */
 		public function toXML() {
-				$document = $this->getDocument();
-				return $document->saveXML();
+				return $this->traceOperation('excel.worksheet.to_xml', function($span) {
+						$this->addPerformanceAttributes($span, count($this->rows));
+						
+						$document = $this->getDocument();
+						$xml = $document->saveXML();
+						
+						// Add XML size to span for performance monitoring
+						$span->setAttribute('excel.worksheet.xml_size_bytes', strlen($xml));
+						
+						return $xml;
+				});
 		}
 
 		/**
@@ -413,18 +423,28 @@ class ExcelWorksheet
 		}
 
 		public function addRows($array, $calculatedColumns = null){
-				foreach($array as $key => $row) {
-						if(isset($calculatedColumns)){
-								foreach ($calculatedColumns as $calculatedColumn) {
-										if($key == 0){
-												array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['header']);
-										} else {
-												array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['content']);
+				return $this->traceOperation('excel.worksheet.add_rows', function($span) use ($array, $calculatedColumns) {
+						$rowCount = count($array);
+						$this->addPerformanceAttributes($span, $rowCount);
+						$span->setAttribute('excel.worksheet.has_calculated_columns', $calculatedColumns !== null);
+						
+						if ($calculatedColumns !== null) {
+								$span->setAttribute('excel.worksheet.calculated_columns_count', count($calculatedColumns));
+						}
+						
+						foreach($array as $key => $row) {
+								if(isset($calculatedColumns)){
+										foreach ($calculatedColumns as $calculatedColumn) {
+												if($key == 0){
+														array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['header']);
+												} else {
+														array_splice($row, $calculatedColumn['index'], 0, $calculatedColumn['content']);
+												}
 										}
 								}
+								$this->addRow($row);
 						}
-						$this->addRow($row);
-				}
-				return $this;
+						return $this;
+				});
 		}
 }

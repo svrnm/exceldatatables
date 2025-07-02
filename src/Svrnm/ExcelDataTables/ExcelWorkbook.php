@@ -12,6 +12,7 @@ namespace Svrnm\ExcelDataTables;
  */
 class ExcelWorkbook implements \Countable
 {
+		use OpenTelemetryTrait;
 		/**
 		 * The source filename
 		 *
@@ -78,8 +79,17 @@ class ExcelWorkbook implements \Countable
 		 * @param string $filename
 		 */
 		public function __construct($filename) {
-				$this->srcFilename = $filename;
-				$this->targetFilename = $filename;
+				$this->traceOperation('excel.workbook.create', function($span) use ($filename) {
+						$this->addFileAttributes($span, $filename, 'open');
+						
+						// Add file size if file exists
+						if (file_exists($filename)) {
+								$span->setAttribute('excel.file.size_bytes', filesize($filename));
+						}
+						
+						$this->srcFilename = $filename;
+						$this->targetFilename = $filename;
+				});
 		}
 
 		public function __destruct() {
@@ -332,35 +342,43 @@ class ExcelWorkbook implements \Countable
 		 * @param string $name
 		 */
 		public function addWorksheet(ExcelWorksheet $worksheet, $id = null, $name = null) {
-				$name = !is_null($name) ? $name : $this->sheetName;
-				if ($id === null) $id = $this->getSheetIdByName($name);
+				return $this->traceOperation('excel.workbook.add_worksheet', function($span) use ($worksheet, $id, $name) {
+						$name = !is_null($name) ? $name : $this->sheetName;
+						if ($id === null) $id = $this->getSheetIdByName($name);
+						
+						$this->addWorksheetAttributes($span, $name, $id);
+						$span->setAttribute('excel.workbook.auto_save', $this->isAutoSaveEnabled());
 
-				if(is_null($id) || $id <= 0) {
-					throw new \Exception('Sheet with name "'.$name.'" not found in file '.$this->srcFilename.'. Appending is not yet implemented.');
-					/*
-					// find a unused id in the worksheets
-					$id = 1;
-					while($this->getXLSX()->statName('xl/worksheets/sheet'.($id++).'.xml') !== false) {}
-					*/
-				}
+						if(is_null($id) || $id <= 0) {
+							throw new \Exception('Sheet with name "'.$name.'" not found in file '.$this->srcFilename.'. Appending is not yet implemented.');
+							/*
+							// find a unused id in the worksheets
+							$id = 1;
+							while($this->getXLSX()->statName('xl/worksheets/sheet'.($id++).'.xml') !== false) {}
+							*/
+						}
 
-				$old = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
-				if($old === false) {
-						throw new \Exception('Appending new sheets is not yet implemented: SheetId:' . $id .', SourceFile:'. $this->srcFilename.', TargetFile:'.$this->targetFilename);
-				} else {
-						$document = new \DOMDocument();
-						$document->loadXML($old);
-						$oldSheetData = $document->getElementsByTagName('sheetData')->item(0);
-						$worksheet->setDateTimeFormatId($this->dateTimeFormatId());
-						$newSheetData = $document->importNode( $worksheet->getDocument()->getElementsByTagName('sheetData')->item(0), true );
-						$oldSheetData->parentNode->replaceChild($newSheetData, $oldSheetData);
-						$xml = $document->saveXML();
-						$this->getXLSX()->addFromString('xl/worksheets/sheet'.$id.'.xml', $xml);
-				}
-				if($this->isAutoSaveEnabled()) {
-						$this->save();
-				}
-				return $this;
+						$old = $this->getXLSX()->getFromName('xl/worksheets/sheet'.$id.'.xml');
+						if($old === false) {
+								throw new \Exception('Appending new sheets is not yet implemented: SheetId:' . $id .', SourceFile:'. $this->srcFilename.', TargetFile:'.$this->targetFilename);
+						} else {
+								$document = new \DOMDocument();
+								$document->loadXML($old);
+								$oldSheetData = $document->getElementsByTagName('sheetData')->item(0);
+								$worksheet->setDateTimeFormatId($this->dateTimeFormatId());
+								$newSheetData = $document->importNode( $worksheet->getDocument()->getElementsByTagName('sheetData')->item(0), true );
+								$oldSheetData->parentNode->replaceChild($newSheetData, $oldSheetData);
+								$xml = $document->saveXML();
+								$this->getXLSX()->addFromString('xl/worksheets/sheet'.$id.'.xml', $xml);
+								
+								// Add XML size to span for performance monitoring
+								$span->setAttribute('excel.worksheet.xml_size_bytes', strlen($xml));
+						}
+						if($this->isAutoSaveEnabled()) {
+								$this->save();
+						}
+						return $this;
+				});
 		}
 
 		/**
@@ -372,28 +390,37 @@ class ExcelWorkbook implements \Countable
 		 */
 		public function refreshTableRange($tableName, $numRows)
 		{
-				$id = $this->getTableIdByName($tableName);
-				if (is_null($id)) {
-					throw new \Exception('table "' . $tableName . '" not found');
-				}
+				return $this->traceOperation('excel.workbook.refresh_table_range', function($span) use ($tableName, $numRows) {
+						$span->setAttribute('excel.table.name', $tableName);
+						$span->setAttribute('excel.table.rows', $numRows);
+						
+						$id = $this->getTableIdByName($tableName);
+						if (is_null($id)) {
+							throw new \Exception('table "' . $tableName . '" not found');
+						}
+						
+						$span->setAttribute('excel.table.id', $id);
 
-				$document = new \DOMDocument();
-				$document->loadXML($this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml'));
+						$document = new \DOMDocument();
+						$document->loadXML($this->getXLSX()->getFromName('xl/tables/table' . $id . '.xml'));
 
-				$table = $document->getElementsByTagName('table')->item(0);
-				if (is_null($table)) {
-					throw new \Exception('could not read "table" from document; '.$document);
-				}
+						$table = $document->getElementsByTagName('table')->item(0);
+						if (is_null($table)) {
+							throw new \Exception('could not read "table" from document; '.$document);
+						}
 
-				$ref = $table->getAttribute('ref');
+						$ref = $table->getAttribute('ref');
+						$span->setAttribute('excel.table.old_ref', $ref);
 
-				$nref = preg_replace('/^(\w+\:[A-Z]+)(\d+)$/', '${1}' . $numRows, $ref);
+						$nref = preg_replace('/^(\w+\:[A-Z]+)(\d+)$/', '${1}' . $numRows, $ref);
+						$span->setAttribute('excel.table.new_ref', $nref);
 
-				$table->setAttribute('ref', $nref);
+						$table->setAttribute('ref', $nref);
 
-				$this->getXLSX()->addFromString('xl/tables/table' . $id . '.xml', $document->saveXML());
+						$this->getXLSX()->addFromString('xl/tables/table' . $id . '.xml', $document->saveXML());
 
-				return $this;
+						return $this;
+				});
 		}
 
 		public function getCalculatedColumns($tableName)
@@ -444,19 +471,31 @@ class ExcelWorkbook implements \Countable
 		 * @return $this
 		 */
 		protected function openXLSX() {
-				$this->xlsx = new \ZipArchive;
-				if(!file_exists($this->srcFilename) && is_readable($this->srcFilename)) {
-						throw new \Exception('File does not exists: '.$this->srcFilename);
-				}
-				if($this->srcFilename !== $this->targetFilename) {
-						file_put_contents($this->targetFilename, file_get_contents($this->srcFilename));
-						$this->srcFilename = $this->targetFilename;
-				}
-				$isOpen = $this->xlsx->open($this->targetFilename);
-				if($isOpen !== true) {
-						throw new \Exception('Could not open file: '.$this->targetFilename.' [ZipArchive error code: '.$isOpen.']');
-				}
-				return $this;
+				return $this->traceOperation('excel.workbook.open_xlsx', function($span) {
+						$this->addFileAttributes($span, $this->srcFilename, 'open');
+						$span->setAttribute('excel.file.target', $this->targetFilename);
+						
+						$this->xlsx = new \ZipArchive;
+						if(!file_exists($this->srcFilename) && is_readable($this->srcFilename)) {
+								throw new \Exception('File does not exists: '.$this->srcFilename);
+						}
+						if($this->srcFilename !== $this->targetFilename) {
+								file_put_contents($this->targetFilename, file_get_contents($this->srcFilename));
+								$this->srcFilename = $this->targetFilename;
+								$span->setAttribute('excel.file.copied', true);
+						}
+						
+						// Add file size for performance monitoring
+						if (file_exists($this->targetFilename)) {
+								$span->setAttribute('excel.file.size_bytes', filesize($this->targetFilename));
+						}
+						
+						$isOpen = $this->xlsx->open($this->targetFilename);
+						if($isOpen !== true) {
+								throw new \Exception('Could not open file: '.$this->targetFilename.' [ZipArchive error code: '.$isOpen.']');
+						}
+						return $this;
+				});
 		}
 
 		/**
@@ -465,10 +504,19 @@ class ExcelWorkbook implements \Countable
 		 * @return $this
 		 */
 		public function save() {
-				$this->getXLSX()->close();
-				$this->srcFilename = $this->targetFilename;
-				$this->openXLSX();
-				return $this;
+				return $this->traceOperation('excel.workbook.save', function($span) {
+						$this->addFileAttributes($span, $this->targetFilename, 'save');
+						
+						// Add file size if available
+						if (file_exists($this->targetFilename)) {
+								$span->setAttribute('excel.file.size_bytes', filesize($this->targetFilename));
+						}
+						
+						$this->getXLSX()->close();
+						$this->srcFilename = $this->targetFilename;
+						$this->openXLSX();
+						return $this;
+				});
 		}
 
 
