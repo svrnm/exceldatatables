@@ -31,7 +31,7 @@ jobs:
 
       - name: Get Composer Cache
         id: composer-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.composer/cache
           key:
